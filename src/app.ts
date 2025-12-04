@@ -20,6 +20,8 @@ app.use(cors({ origin: ['http://localhost:5173'], credentials: true }));
 // application routes
 app.use('/api/v1', router);
 
+// localhost:5000/api/v1/
+
 app.get('/', (req: Request, res: Response) => {
   res.send('Hi Next Level Developer !');
 });
