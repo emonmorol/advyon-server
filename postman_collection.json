@@ -1,0 +1,179 @@
+{
+	"info": {
+		"_postman_id": "user-crud-collection",
+		"name": "Advyon User CRUD",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Create Client User",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"password\": \"password123\",\n    \"user\": {\n        \"email\": \"client@example.com\",\n        \"fullName\": \"John Client\",\n        \"role\": \"client\",\n        \"status\": \"active\"\n    },\n    \"client\": {\n        \"phoneNumber\": \"1234567890\",\n        \"address\": \"123 Main St\"\n    }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/users/create-user",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"users",
+						"create-user"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create Lawyer User",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"password\": \"password123\",\n    \"user\": {\n        \"email\": \"lawyer@example.com\",\n        \"fullName\": \"Jane Lawyer\",\n        \"role\": \"lawyer\",\n        \"status\": \"active\"\n    },\n    \"lawyer\": {\n        \"barRegistrationNumber\": \"BAR123\",\n        \"barCouncilName\": \"State Bar\",\n        \"yearsOfExperience\": 5,\n        \"primaryPracticeArea\": \"Criminal Law\"\n    }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/users/create-user",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"users",
+						"create-user"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get All Users",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/v1/users",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"users"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Single User",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/v1/users/:id",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"users",
+						":id"
+					],
+					"variable": [
+						{
+							"key": "id",
+							"value": "C-0001"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update User",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"user\": {\n        \"fullName\": \"Updated Name\"\n    }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/users/:id",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"users",
+						":id"
+					],
+					"variable": [
+						{
+							"key": "id",
+							"value": "C-0001"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete User",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/v1/users/:id",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"users",
+						":id"
+					],
+					"variable": [
+						{
+							"key": "id",
+							"value": "C-0001"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000"
+		}
+	]
+}
