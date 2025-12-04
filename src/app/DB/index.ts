@@ -6,6 +6,7 @@ const superUser = {
   id: '0001',
   email: 'example@gmail.com',
   password: config.super_admin_password,
+  fullName: 'Super Admin',
   needsPasswordChange: false,
   role: USER_ROLE.superAdmin,
   status: 'in-progress',
