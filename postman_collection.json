@@ -1,208 +1,504 @@
 {
 	"info": {
-		"_postman_id": "user-crud-collection",
-		"name": "Advyon User CRUD",
+		"_postman_id": "advyon-complete-collection",
+		"name": "Advyon Legal Platform - Complete API",
+		"description": "Complete API collection for Advyon Legal Platform including Auth (Clerk) and User CRUD operations",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
 		{
-			"name": "Create Client User",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "Content-Type",
-						"value": "application/json"
-					}
-				],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n    \"password\": \"password123\",\n    \"user\": {\n        \"email\": \"client@example.com\",\n        \"fullName\": \"John Client\",\n        \"role\": \"client\",\n        \"status\": \"active\"\n    },\n    \"client\": {\n        \"phoneNumber\": \"1234567890\",\n        \"address\": \"123 Main St\"\n    }\n}"
-				},
-				"url": {
-					"raw": "{{base_url}}/api/v1/users/create-user",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"api",
-						"v1",
-						"users",
-						"create-user"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Create Lawyer User",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "Content-Type",
-						"value": "application/json"
-					}
-				],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n    \"password\": \"password123\",\n    \"user\": {\n        \"email\": \"lawyer@example.com\",\n        \"fullName\": \"Jane Lawyer\",\n        \"role\": \"lawyer\",\n        \"status\": \"active\"\n    },\n    \"lawyer\": {\n        \"barRegistrationNumber\": \"BAR123\",\n        \"barCouncilName\": \"State Bar\",\n        \"yearsOfExperience\": 5,\n        \"primaryPracticeArea\": \"Criminal Law\"\n    }\n}"
-				},
-				"url": {
-					"raw": "{{base_url}}/api/v1/users/create-user",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"api",
-						"v1",
-						"users",
-						"create-user"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Create Judge User",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "Content-Type",
-						"value": "application/json"
-					}
-				],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n    \"password\": \"password123\",\n    \"user\": {\n        \"email\": \"judge@example.com\",\n        \"fullName\": \"Judge Smith\",\n        \"role\": \"judge\",\n        \"status\": \"active\"\n    },\n    \"judge\": {\n        \"courtName\": \"Supreme Court\",\n        \"designation\": \"Chief Justice\"\n    }\n}"
-				},
-				"url": {
-					"raw": "{{base_url}}/api/v1/users/create-user",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"api",
-						"v1",
-						"users",
-						"create-user"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Get All Users",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/api/v1/users",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"api",
-						"v1",
-						"users"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Get Single User",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/api/v1/users/:id",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"api",
-						"v1",
-						"users",
-						":id"
-					],
-					"variable": [
+			"name": "Auth (Clerk Integration)",
+			"item": [
+				{
+					"name": "Sync User from Clerk",
+					"event": [
 						{
-							"key": "id",
-							"value": "C-0001"
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate mock Clerk JWT token for testing",
+									"// In production, this will come from Clerk",
+									"const clerkUserId = pm.variables.get('clerk_user_id') || 'user_' + Date.now();",
+									"const email = pm.variables.get('test_email') || 'test@example.com';",
+									"",
+									"pm.environment.set('clerk_user_id', clerkUserId);",
+									"pm.environment.set('test_email', email);",
+									"",
+									"console.log('Clerk User ID:', clerkUserId);",
+									"console.log('Email:', email);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has success true', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test('Response contains user data', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data).to.have.property('id');",
+									"    pm.expect(jsonData.data).to.have.property('clerkUserId');",
+									"    pm.expect(jsonData.data).to.have.property('needsOnboarding');",
+									"    ",
+									"    // Save user ID for next requests",
+									"    pm.environment.set('user_id', jsonData.data.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
 						}
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Update User",
-			"request": {
-				"method": "PATCH",
-				"header": [
-					{
-						"key": "Content-Type",
-						"value": "application/json"
-					}
-				],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n    \"user\": {\n        \"fullName\": \"Updated Name\"\n    }\n}"
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerk_jwt_token}}",
+								"description": "Clerk JWT token - Get from Clerk Dashboard"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/sync",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "sync"]
+						},
+						"description": "Syncs user from Clerk. Creates new user if doesn't exist, returns existing user otherwise."
+					},
+					"response": []
 				},
-				"url": {
-					"raw": "{{base_url}}/api/v1/users/:id",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"api",
-						"v1",
-						"users",
-						":id"
-					],
-					"variable": [
+				{
+					"name": "Onboard Client",
+					"event": [
 						{
-							"key": "id",
-							"value": "C-0001"
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate test data for client onboarding",
+									"const timestamp = Date.now();",
+									"",
+									"pm.environment.set('client_full_name', 'John Client ' + timestamp);",
+									"pm.environment.set('client_phone', '+880171234' + (timestamp % 10000));",
+									"pm.environment.set('client_address', '123 Main Street, Dhaka');"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('User role is client', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.user.role).to.equal('client');",
+									"    pm.expect(jsonData.data.user.status).to.equal('active');",
+									"});",
+									"",
+									"pm.test('Client profile created', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.profile).to.not.be.null;",
+									"    pm.expect(jsonData.data.profile.type).to.equal('client');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
 						}
-					]
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerk_jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"role\": \"client\",\n    \"profile\": {\n        \"fullName\": \"{{client_full_name}}\",\n        \"displayName\": \"JC\",\n        \"phone\": \"{{client_phone}}\",\n        \"address\": \"{{client_address}}\",\n        \"preferredLanguage\": \"en\",\n        \"timezone\": \"Asia/Dhaka\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/onboard",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "onboard"]
+						},
+						"description": "Complete onboarding for a client user"
+					},
+					"response": []
+				},
+				{
+					"name": "Onboard Lawyer",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate test data for lawyer onboarding",
+									"const timestamp = Date.now();",
+									"const barNumber = 'BAR' + (timestamp % 100000);",
+									"",
+									"pm.environment.set('lawyer_full_name', 'Jane Lawyer ' + timestamp);",
+									"pm.environment.set('lawyer_bar_number', barNumber);",
+									"pm.environment.set('lawyer_bar_council', 'Bangladesh Bar Council');",
+									"pm.environment.set('lawyer_experience', Math.floor(Math.random() * 20) + 1);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('User role is lawyer', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.user.role).to.equal('lawyer');",
+									"});",
+									"",
+									"pm.test('Lawyer profile created with bar info', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.profile.type).to.equal('lawyer');",
+									"    pm.expect(jsonData.data.profile.barRegistrationNumber).to.exist;",
+									"    pm.expect(jsonData.data.profile.verificationStatus).to.equal('pending');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerk_jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"role\": \"lawyer\",\n    \"profile\": {\n        \"fullName\": \"{{lawyer_full_name}}\",\n        \"displayName\": \"Adv. Jane\",\n        \"phone\": \"+8801712345678\",\n        \"barRegistrationNumber\": \"{{lawyer_bar_number}}\",\n        \"barCouncilName\": \"{{lawyer_bar_council}}\",\n        \"yearsOfExperience\": {{lawyer_experience}},\n        \"primaryPracticeArea\": \"Criminal Law\",\n        \"preferredLanguage\": \"en\",\n        \"timezone\": \"Asia/Dhaka\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/onboard",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "onboard"]
+						},
+						"description": "Complete onboarding for a lawyer user with bar registration details"
+					},
+					"response": []
+				},
+				{
+					"name": "Onboard Judge",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate test data for judge onboarding",
+									"const timestamp = Date.now();",
+									"const courts = ['Supreme Court', 'High Court', 'District Court', 'Metropolitan Court'];",
+									"const designations = ['Chief Justice', 'Justice', 'Senior Judge', 'Judge'];",
+									"",
+									"const randomCourt = courts[Math.floor(Math.random() * courts.length)];",
+									"const randomDesignation = designations[Math.floor(Math.random() * designations.length)];",
+									"",
+									"pm.environment.set('judge_full_name', 'Judge Smith ' + timestamp);",
+									"pm.environment.set('judge_court', randomCourt);",
+									"pm.environment.set('judge_designation', randomDesignation);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('User role is judge', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.user.role).to.equal('judge');",
+									"});",
+									"",
+									"pm.test('Judge profile created with court info', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.profile.type).to.equal('judge');",
+									"    pm.expect(jsonData.data.profile.courtName).to.exist;",
+									"    pm.expect(jsonData.data.profile.designation).to.exist;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerk_jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"role\": \"judge\",\n    \"profile\": {\n        \"fullName\": \"{{judge_full_name}}\",\n        \"displayName\": \"Hon. Smith\",\n        \"phone\": \"+8801712345679\",\n        \"courtName\": \"{{judge_court}}\",\n        \"designation\": \"{{judge_designation}}\",\n        \"preferredLanguage\": \"en\",\n        \"timezone\": \"Asia/Dhaka\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/onboard",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "onboard"]
+						},
+						"description": "Complete onboarding for a judge user with court details"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains user and profile', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data).to.have.property('user');",
+									"    pm.expect(jsonData.data).to.have.property('profile');",
+									"});",
+									"",
+									"pm.test('User has required fields', function () {",
+									"    const jsonData = pm.response.json();",
+									"    const user = jsonData.data.user;",
+									"    pm.expect(user).to.have.property('id');",
+									"    pm.expect(user).to.have.property('email');",
+									"    pm.expect(user).to.have.property('fullName');",
+									"    pm.expect(user).to.have.property('role');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerk_jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "me"]
+						},
+						"description": "Get current authenticated user with their profile"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Profile",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate updated data",
+									"const timestamp = Date.now();",
+									"pm.environment.set('updated_display_name', 'Updated Name ' + timestamp);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Profile updated successfully', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.message).to.include('updated');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerk_jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"fullName\": \"Updated Full Name\",\n    \"displayName\": \"{{updated_display_name}}\",\n    \"preferredLanguage\": \"bn\",\n    \"timezone\": \"Asia/Dhaka\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "me"]
+						},
+						"description": "Update current user's profile information"
+					},
+					"response": []
 				}
-			},
-			"response": []
+			],
+			"description": "Authentication endpoints with Clerk JWT integration"
 		},
 		{
-			"name": "Delete User",
-			"request": {
-				"method": "DELETE",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/api/v1/users/:id",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"api",
-						"v1",
-						"users",
-						":id"
-					],
-					"variable": [
-						{
-							"key": "id",
-							"value": "C-0001"
+			"name": "User CRUD (Legacy)",
+			"item": [
+				{
+					"name": "Create Client User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"password\": \"password123\",\n    \"user\": {\n        \"email\": \"client@example.com\",\n        \"fullName\": \"John Client\",\n        \"role\": \"client\",\n        \"status\": \"active\"\n    },\n    \"client\": {\n        \"phoneNumber\": \"1234567890\",\n        \"address\": \"123 Main St\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/create-user",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "create-user"]
 						}
-					]
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Single User",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{user_id}}"
+								}
+							]
+						}
+					},
+					"response": []
 				}
-			},
-			"response": []
+			],
+			"description": "Legacy user CRUD operations (for backward compatibility)"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global pre-request script",
+					"// Set default values if not already set",
+					"if (!pm.environment.get('base_url')) {",
+					"    pm.environment.set('base_url', 'http://localhost:5000');",
+					"}",
+					"",
+					"// Log request details",
+					"console.log('Request:', pm.request.method, pm.request.url.toString());"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global test script",
+					"// Log response time",
+					"console.log('Response time:', pm.response.responseTime, 'ms');",
+					"",
+					"// Log response status",
+					"console.log('Status:', pm.response.code, pm.response.status);"
+				]
+			}
 		}
 	],
 	"variable": [
 		{
 			"key": "base_url",
-			"value": "http://localhost:5000"
+			"value": "http://localhost:5000",
+			"type": "string"
+		},
+		{
+			"key": "clerk_jwt_token",
+			"value": "YOUR_CLERK_JWT_TOKEN_HERE",
+			"type": "string",
+			"description": "Get this from Clerk Dashboard or your frontend after login"
 		}
 	]
 }
