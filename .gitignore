@@ -3,5 +3,4 @@ dist
 .env
 docs
 src/app/modules/user/
-src/app/modules/document/
 Advyon_API.json
