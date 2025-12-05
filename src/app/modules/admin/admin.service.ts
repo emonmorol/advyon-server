@@ -76,9 +76,19 @@ const updateUserRole = async (
   role: TUserRole,
   requestingUserId: string,
 ): Promise<any> => {
+  console.log('=== updateUserRole START ===');
+  console.log('Input params:', { id, role, requestingUserId });
+
   // Prevent self-modification
   const requestingUser = await User.findOne({ id: requestingUserId });
+  console.log('Requesting user found:', {
+    userId: requestingUser?.id,
+    _id: requestingUser?._id.toString(),
+    role: requestingUser?.role,
+  });
+
   if (requestingUser?._id.toString() === id) {
+    console.log('ERROR: User attempting to modify self');
     throw new AppError(
       httpStatus.FORBIDDEN,
       ADMIN_ERROR_MESSAGES.CANNOT_MODIFY_SELF,
@@ -86,8 +96,16 @@ const updateUserRole = async (
   }
 
   const user = await User.findById(id);
+  console.log('Target user found:', {
+    _id: user?._id.toString(),
+    id: user?.id,
+    role: user?.role,
+    status: user?.status,
+    isDeleted: user?.isDeleted,
+  });
 
   if (!user) {
+    console.log('ERROR: User not found');
     throw new AppError(
       httpStatus.NOT_FOUND,
       ADMIN_ERROR_MESSAGES.USER_NOT_FOUND,
@@ -95,6 +113,7 @@ const updateUserRole = async (
   }
 
   if (user.isDeleted) {
+    console.log('ERROR: User is deleted');
     throw new AppError(
       httpStatus.NOT_FOUND,
       ADMIN_ERROR_MESSAGES.USER_NOT_FOUND,
@@ -103,13 +122,16 @@ const updateUserRole = async (
 
   // If changing FROM superAdmin, check if they're the last one
   if (user.role === 'superAdmin' && role !== 'superAdmin') {
+    console.log('Checking superAdmin count (changing FROM superAdmin)...');
     const superAdminCount = await User.countDocuments({
       role: 'superAdmin',
       isDeleted: false,
       status: { $ne: 'blocked' },
     });
+    console.log('Active superAdmin count:', superAdminCount);
 
     if (superAdminCount <= 1) {
+      console.log('ERROR: Cannot remove last superAdmin');
       throw new AppError(
         httpStatus.FORBIDDEN,
         ADMIN_ERROR_MESSAGES.CANNOT_DELETE_LAST_SUPERADMIN,
@@ -117,11 +139,19 @@ const updateUserRole = async (
     }
   }
 
+  console.log('Updating user role to:', role);
   const updatedUser = await User.findByIdAndUpdate(
     id,
     { role },
     { new: true },
   ).select('-password');
+
+  console.log('User role updated successfully:', {
+    _id: updatedUser?._id.toString(),
+    id: updatedUser?.id,
+    newRole: updatedUser?.role,
+  });
+  console.log('=== updateUserRole END ===\n');
 
   return updatedUser;
 };

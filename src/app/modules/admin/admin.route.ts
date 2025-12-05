@@ -34,7 +34,7 @@ router.get(
 router.patch(
   '/users/:id/role',
   //auth('superAdmin'),
-  /// validateRequest(updateUserRoleSchema),
+  // validateRequest(updateUserRoleSchema),
   AdminController.updateUserRole,
 );
 

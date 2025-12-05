@@ -51,6 +51,7 @@ const getSingleUser = catchAsync(async (req: Request, res: Response) => {
 
 const updateUserRole = catchAsync(async (req: Request, res: Response) => {
   const requestingUserId = req.user.userId;
+  console.log(req.user)
   const result = await AdminService.updateUserRole(
     req.params.id,
     req.body.role,
