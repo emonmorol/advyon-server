@@ -1,0 +1,1276 @@
+{
+	"info": {
+		"_postman_id": "advyon-legal-platform-api",
+		"name": "Advyon Legal Platform API",
+		"description": "Complete API collection for Advyon Legal Platform with data generation scripts",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Auth Module",
+			"item": [
+				{
+					"name": "Sync User (First Login)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// This endpoint syncs user from Clerk on first login",
+									"// The clerkUserId and email come from the JWT token",
+									"// No body is required - data is extracted from auth header"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 or 201', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test('Response has success and data', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('success');",
+									"    pm.expect(jsonData).to.have.property('data');",
+									"});",
+									"",
+									"// Save user ID for later requests",
+									"if (pm.response.code === 200 || pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.environment.set('userId', jsonData.data.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/sync",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "sync"]
+						},
+						"description": "Syncs user from Clerk JWT on first login. Requires Clerk authentication token."
+					},
+					"response": []
+				},
+				{
+					"name": "Onboard User - Client",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate client onboarding data",
+									"const clientData = {",
+									"    role: 'client',",
+									"    profile: {",
+									"        fullName: pm.variables.replaceIn('{{$randomFullName}}'),",
+									"        displayName: pm.variables.replaceIn('{{$randomFirstName}}'),",
+									"        phone: '+1' + Math.floor(Math.random() * 9000000000 + 1000000000),",
+									"        avatarUrl: 'https://i.pravatar.cc/150?img=' + Math.floor(Math.random() * 70),",
+									"        preferredLanguage: 'en',",
+									"        timezone: 'America/New_York',",
+									"        address: pm.variables.replaceIn('{{$randomStreetAddress}}, {{$randomCity}}, {{$randomCountry}}')",
+									"    }",
+									"};",
+									"",
+									"pm.environment.set('clientOnboardData', JSON.stringify(clientData));"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('User is onboarded successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data.needsOnboarding).to.be.false;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{{clientOnboardData}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/onboard",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "onboard"]
+						},
+						"description": "Complete user onboarding as a Client with profile information"
+					},
+					"response": []
+				},
+				{
+					"name": "Onboard User - Lawyer",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate lawyer onboarding data",
+									"const lawyerData = {",
+									"    role: 'lawyer',",
+									"    profile: {",
+									"        fullName: pm.variables.replaceIn('{{$randomFullName}}'),",
+									"        displayName: 'Atty. ' + pm.variables.replaceIn('{{$randomLastName}}'),",
+									"        phone: '+1' + Math.floor(Math.random() * 9000000000 + 1000000000),",
+									"        avatarUrl: 'https://i.pravatar.cc/150?img=' + Math.floor(Math.random() * 70),",
+									"        preferredLanguage: 'en',",
+									"        timezone: 'America/New_York',",
+									"        barRegistrationNumber: 'BAR-' + Math.floor(Math.random() * 900000 + 100000),",
+									"        barCouncilName: pm.variables.replaceIn('{{$randomCity}} Bar Council'),",
+									"        yearsOfExperience: Math.floor(Math.random() * 30 + 1),",
+									"        primaryPracticeArea: ['Criminal Defense', 'Civil Litigation', 'Corporate Law', 'Family Law'][Math.floor(Math.random() * 4)]",
+									"    }",
+									"};",
+									"",
+									"pm.environment.set('lawyerOnboardData', JSON.stringify(lawyerData));"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Lawyer is onboarded successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data.role).to.equal('lawyer');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{{lawyerOnboardData}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/onboard",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "onboard"]
+						},
+						"description": "Complete user onboarding as a Lawyer with required bar registration details"
+					},
+					"response": []
+				},
+				{
+					"name": "Onboard User - Judge",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate judge onboarding data",
+									"const judgeData = {",
+									"    role: 'judge',",
+									"    profile: {",
+									"        fullName: 'Hon. ' + pm.variables.replaceIn('{{$randomFullName}}'),",
+									"        displayName: 'Judge ' + pm.variables.replaceIn('{{$randomLastName}}'),",
+									"        phone: '+1' + Math.floor(Math.random() * 9000000000 + 1000000000),",
+									"        avatarUrl: 'https://i.pravatar.cc/150?img=' + Math.floor(Math.random() * 70),",
+									"        preferredLanguage: 'en',",
+									"        timezone: 'America/New_York',",
+									"        courtName: pm.variables.replaceIn('{{$randomCity}} District Court'),",
+									"        designation: ['District Judge', 'Circuit Judge', 'Supreme Court Justice', 'Magistrate Judge'][Math.floor(Math.random() * 4)]",
+									"    }",
+									"};",
+									"",
+									"pm.environment.set('judgeOnboardData', JSON.stringify(judgeData));"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Judge is onboarded successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data.role).to.equal('judge');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{{judgeOnboardData}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/onboard",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "onboard"]
+						},
+						"description": "Complete user onboarding as a Judge with court and designation details"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains user and profile', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data).to.have.property('user');",
+									"    pm.expect(jsonData.data.user).to.have.property('email');",
+									"    pm.expect(jsonData.data.user).to.have.property('role');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "me"]
+						},
+						"description": "Get current authenticated user with their profile information"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Profile",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate profile update data",
+									"const updateData = {",
+									"    fullName: pm.variables.replaceIn('{{$randomFullName}}'),",
+									"    displayName: pm.variables.replaceIn('{{$randomFirstName}}'),",
+									"    phone: '+1' + Math.floor(Math.random() * 9000000000 + 1000000000),",
+									"    preferredLanguage: 'en',",
+									"    timezone: 'America/Los_Angeles'",
+									"};",
+									"",
+									"pm.environment.set('profileUpdateData', JSON.stringify(updateData));"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Profile updated successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{{profileUpdateData}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "me"]
+						},
+						"description": "Update current user's profile information"
+					},
+					"response": []
+				}
+			],
+			"description": "Authentication and user profile management endpoints"
+		},
+		{
+			"name": "Case Module",
+			"item": [
+				{
+					"name": "Create Case",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate case data",
+									"const caseTypes = ['Criminal Defense', 'Civil Litigation', 'Corporate Law', 'Family Law', 'Immigration', 'Intellectual Property', 'Real Estate', 'Tax Law', 'Employment Law', 'Environmental Law'];",
+									"const urgencyLevels = ['low', 'medium', 'high'];",
+									"",
+									"const caseData = {",
+									"    title: pm.variables.replaceIn('{{$randomWords}}') + ' Case',",
+									"    caseNumber: 'CASE-' + new Date().getFullYear() + '-' + Math.floor(Math.random() * 90000 + 10000),",
+									"    caseType: caseTypes[Math.floor(Math.random() * caseTypes.length)],",
+									"    urgency: urgencyLevels[Math.floor(Math.random() * urgencyLevels.length)],",
+									"    nextDeadline: new Date(Date.now() + Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000).toISOString(),",
+									"    nextDeadlineDescription: 'File initial response',",
+									"    folders: [",
+									"        { name: 'Evidence', order: 0 },",
+									"        { name: 'Witness Statements', order: 1 },",
+									"        { name: 'Legal Documents', order: 2 },",
+									"        { name: 'Correspondence', order: 3 }",
+									"    ]",
+									"};",
+									"",
+									"pm.environment.set('createCaseData', JSON.stringify(caseData));"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Case created successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('id');",
+									"    pm.expect(jsonData.data).to.have.property('caseNumber');",
+									"    ",
+									"    // Save case ID for later requests",
+									"    pm.environment.set('caseId', jsonData.data.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{{createCaseData}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/cases",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "cases"]
+						},
+						"description": "Create a new case with folders"
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Cases",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains cases array', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/cases?page=1&limit=10",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "cases"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "status",
+									"value": "active",
+									"disabled": true
+								},
+								{
+									"key": "urgency",
+									"value": "high",
+									"disabled": true
+								},
+								{
+									"key": "search",
+									"value": "criminal",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get all cases with optional filters (status, urgency, search)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Case By ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains case details', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data).to.have.property('id');",
+									"    pm.expect(jsonData.data).to.have.property('caseNumber');",
+									"    pm.expect(jsonData.data).to.have.property('title');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/cases/{{caseId}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "cases", "{{caseId}}"]
+						},
+						"description": "Get a single case by its ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Case",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate case update data",
+									"const statuses = ['active', 'pending', 'review', 'closed'];",
+									"const urgencyLevels = ['low', 'medium', 'high'];",
+									"",
+									"const updateData = {",
+									"    title: pm.variables.replaceIn('{{$randomWords}}') + ' Updated Case',",
+									"    status: statuses[Math.floor(Math.random() * statuses.length)],",
+									"    urgency: urgencyLevels[Math.floor(Math.random() * urgencyLevels.length)],",
+									"    progress: Math.floor(Math.random() * 101),",
+									"    nextDeadlineDescription: 'Updated deadline description'",
+									"};",
+									"",
+									"pm.environment.set('updateCaseData', JSON.stringify(updateData));"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Case updated successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{{updateCaseData}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/cases/{{caseId}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "cases", "{{caseId}}"]
+						},
+						"description": "Update case details including status, urgency, and progress"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Case",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Case deleted successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/cases/{{caseId}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "cases", "{{caseId}}"]
+						},
+						"description": "Soft delete a case"
+					},
+					"response": []
+				}
+			],
+			"description": "Case management endpoints for creating, reading, updating, and deleting cases"
+		},
+		{
+			"name": "Document Module",
+			"item": [
+				{
+					"name": "Upload Document",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Set folder name for document upload",
+									"const folders = ['Evidence', 'Witness Statements', 'Legal Documents', 'Correspondence'];",
+									"pm.environment.set('documentFolder', folders[Math.floor(Math.random() * folders.length)]);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Document uploaded successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('id');",
+									"    pm.expect(jsonData.data).to.have.property('fileName');",
+									"    pm.expect(jsonData.data).to.have.property('cloudinaryUrl');",
+									"    ",
+									"    // Save document ID for later requests",
+									"    pm.environment.set('documentId', jsonData.data.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": [],
+									"description": "Select a file to upload (PDF, DOC, DOCX, JPG, PNG)"
+								},
+								{
+									"key": "folderName",
+									"value": "{{documentFolder}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{caseId}}/upload",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{caseId}}", "upload"]
+						},
+						"description": "Upload a document to a specific case folder. Requires multipart/form-data with file and folderName."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Documents by Case",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains documents', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data).to.be.an('object');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{caseId}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{caseId}}"],
+							"query": [
+								{
+									"key": "folder",
+									"value": "Evidence",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get all documents for a case, optionally filtered by folder"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Document",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Document deleted successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{caseId}}/{{documentId}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{caseId}}", "{{documentId}}"]
+						},
+						"description": "Delete a document from a case"
+					},
+					"response": []
+				}
+			],
+			"description": "Document management endpoints for uploading, retrieving, and deleting case documents"
+		},
+		{
+			"name": "User Module",
+			"item": [
+				{
+					"name": "Create User - Client",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate client user data",
+									"const userData = {",
+									"    password: 'Password123!',",
+									"    user: {",
+									"        email: pm.variables.replaceIn('client.{{$randomEmail}}'),",
+									"        fullName: pm.variables.replaceIn('{{$randomFullName}}'),",
+									"        role: 'client',",
+									"        status: 'active'",
+									"    },",
+									"    client: {",
+									"        phoneNumber: '+1' + Math.floor(Math.random() * 9000000000 + 1000000000),",
+									"        address: pm.variables.replaceIn('{{$randomStreetAddress}}, {{$randomCity}}, {{$randomCountry}}')",
+									"    }",
+									"};",
+									"",
+									"pm.environment.set('createClientUserData', JSON.stringify(userData));"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Client user created successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('id');",
+									"    ",
+									"    // Save user ID",
+									"    pm.environment.set('createdUserId', jsonData.data.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{{createClientUserData}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/create-user",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "create-user"]
+						},
+						"description": "Create a new client user with profile"
+					},
+					"response": []
+				},
+				{
+					"name": "Create User - Lawyer",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate lawyer user data",
+									"const userData = {",
+									"    password: 'Password123!',",
+									"    user: {",
+									"        email: pm.variables.replaceIn('lawyer.{{$randomEmail}}'),",
+									"        fullName: pm.variables.replaceIn('{{$randomFullName}}'),",
+									"        role: 'lawyer',",
+									"        status: 'active'",
+									"    },",
+									"    lawyer: {",
+									"        barRegistrationNumber: 'BAR-' + Math.floor(Math.random() * 900000 + 100000),",
+									"        barCouncilName: pm.variables.replaceIn('{{$randomCity}} Bar Council'),",
+									"        yearsOfExperience: Math.floor(Math.random() * 30 + 1),",
+									"        primaryPracticeArea: ['Criminal Defense', 'Civil Litigation', 'Corporate Law', 'Family Law'][Math.floor(Math.random() * 4)],",
+									"        verificationNotes: 'Pending verification'",
+									"    }",
+									"};",
+									"",
+									"pm.environment.set('createLawyerUserData', JSON.stringify(userData));"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Lawyer user created successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data.role).to.equal('lawyer');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{{createLawyerUserData}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/create-user",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "create-user"]
+						},
+						"description": "Create a new lawyer user with bar registration details"
+					},
+					"response": []
+				},
+				{
+					"name": "Create User - Judge",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate judge user data",
+									"const userData = {",
+									"    password: 'Password123!',",
+									"    user: {",
+									"        email: pm.variables.replaceIn('judge.{{$randomEmail}}'),",
+									"        fullName: 'Hon. ' + pm.variables.replaceIn('{{$randomFullName}}'),",
+									"        role: 'judge',",
+									"        status: 'active'",
+									"    },",
+									"    judge: {",
+									"        courtName: pm.variables.replaceIn('{{$randomCity}} District Court'),",
+									"        designation: ['District Judge', 'Circuit Judge', 'Supreme Court Justice', 'Magistrate Judge'][Math.floor(Math.random() * 4)]",
+									"    }",
+									"};",
+									"",
+									"pm.environment.set('createJudgeUserData', JSON.stringify(userData));"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Judge user created successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data.role).to.equal('judge');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{{createJudgeUserData}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/create-user",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "create-user"]
+						},
+						"description": "Create a new judge user with court details"
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Users",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains users array', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						},
+						"description": "Get all users in the system"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Single User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains user details', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data).to.have.property('id');",
+									"    pm.expect(jsonData.data).to.have.property('email');",
+									"    pm.expect(jsonData.data).to.have.property('role');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/{{createdUserId}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "{{createdUserId}}"]
+						},
+						"description": "Get a single user by ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Update User",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate user update data",
+									"const updateData = {",
+									"    user: {",
+									"        fullName: pm.variables.replaceIn('{{$randomFullName}}'),",
+									"        status: ['active', 'inactive'][Math.floor(Math.random() * 2)]",
+									"    }",
+									"};",
+									"",
+									"pm.environment.set('updateUserData', JSON.stringify(updateData));"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('User updated successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{{updateUserData}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/{{createdUserId}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "{{createdUserId}}"]
+						},
+						"description": "Update user information"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('User deleted successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/{{createdUserId}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "{{createdUserId}}"]
+						},
+						"description": "Delete a user (soft delete)"
+					},
+					"response": []
+				}
+			],
+			"description": "User management endpoints for CRUD operations on users with different roles"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000",
+			"type": "string"
+		},
+		{
+			"key": "clerkToken",
+			"value": "your_clerk_jwt_token_here",
+			"type": "string"
+		},
+		{
+			"key": "userId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "caseId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "documentId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "createdUserId",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
