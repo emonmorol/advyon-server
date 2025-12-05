@@ -2,4 +2,10 @@ node_modules
 dist
 .env
 docs
-module_example/
+src/app/modules/document/
+src/app/modules/user/
+src/app/modules/case/
+src/app/modules/document/
+Advyon_API.json
+src/app/config/document-upload.config.ts
+src/app/config/gemini.config.ts

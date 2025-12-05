@@ -23,6 +23,7 @@ const auth = (...requiredRoles: TUserRole[]) => {
       // Verify Clerk JWT token
       const decoded = await verifyToken(token, {
         secretKey: config.clerk_secret_key as string,
+        issuer: (iss) => iss.startsWith('https://'), // Accept any Clerk issuer
       });
 
       // Extract Clerk user data from JWT
