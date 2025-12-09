@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { CaseStatus, CaseUrgency } from './case.constant';
 
 const caseFolderSchema = z.object({
   name: z.string().min(1, 'Folder name is required'),
