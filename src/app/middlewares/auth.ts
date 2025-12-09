@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import httpStatus from 'http-status';
-import jwt, { JwtPayload } from 'jsonwebtoken';
+import { verifyToken } from '@clerk/clerk-sdk-node';
 import config from '../config';
 import AppError from '../errors/appError';
 import { TUserRole } from '../modules/user/user.interface';
@@ -9,62 +9,83 @@ import catchAsync from '../utils/catchAsync';
 
 const auth = (...requiredRoles: TUserRole[]) => {
   return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const token = req.headers.authorization;
+    const authHeader = req.headers.authorization;
 
-    // checking if the token is missing
-    if (!token) {
+    // Check if authorization header exists
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized!');
     }
 
-    // checking if the given token is valid
-    const decoded = jwt.verify(
-      token,
-      config.jwt_access_secret as string,
-    ) as JwtPayload;
+    // Extract token
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
-    const { role, userId, iat } = decoded;
+    try {
+      // Verify Clerk JWT token
+      const decoded = await verifyToken(token, {
+        secretKey: config.clerk_secret_key as string,
+        issuer: (iss) => iss.startsWith('https://'), // Accept any Clerk issuer
+      });
 
-    // checking if the user is exist
-    const user = await User.isUserExistsByCustomId(userId);
+      // Extract Clerk user data from JWT
+      const clerkUserId = decoded.sub;
+      const email = decoded.email as string;
 
-    if (!user) {
-      throw new AppError(httpStatus.NOT_FOUND, 'This user is not found !');
+      // Find user in database by Clerk ID
+      const user = await User.findOne({ clerkUserId });
+
+      if (!user) {
+        // For /auth/sync endpoint, allow non-existent users
+        if (req.path === '/sync') {
+          req.user = {
+            clerkUserId,
+            email,
+            emailVerified: decoded.email_verified as boolean,
+          };
+          return next();
+        }
+        throw new AppError(httpStatus.NOT_FOUND, 'This user is not found!');
+      }
+
+      // Check if user is deleted
+      if (user.isDeleted) {
+        throw new AppError(httpStatus.FORBIDDEN, 'This user is deleted!');
+      }
+
+      // Check if user is blocked
+      if (user.status === 'blocked') {
+        throw new AppError(httpStatus.FORBIDDEN, 'This user is blocked!');
+      }
+
+      // Check role-based access
+      if (requiredRoles.length > 0 && !requiredRoles.includes(user.role as TUserRole)) {
+        throw new AppError(
+          httpStatus.UNAUTHORIZED,
+          'You are not authorized!',
+        );
+      }
+
+      // Attach user data to request
+      req.user = {
+        clerkUserId,
+        email,
+        userId: user.id,
+        role: user.role,
+        emailVerified: decoded.email_verified as boolean,
+      };
+
+      next();
+    } catch (error: any) {
+      // Handle Clerk verification errors
+      if (error.message?.includes('expired')) {
+        throw new AppError(httpStatus.UNAUTHORIZED, 'Token has expired!');
+      }
+      if (error.message?.includes('invalid')) {
+        throw new AppError(httpStatus.UNAUTHORIZED, 'Invalid token!');
+      }
+      throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized!');
     }
-    // checking if the user is already deleted
-
-    const isDeleted = user?.isDeleted;
-
-    if (isDeleted) {
-      throw new AppError(httpStatus.FORBIDDEN, 'This user is deleted !');
-    }
-
-    // checking if the user is blocked
-    const userStatus = user?.status;
-
-    if (userStatus === 'blocked') {
-      throw new AppError(httpStatus.FORBIDDEN, 'This user is blocked ! !');
-    }
-
-    if (
-      user.passwordChangedAt &&
-      User.isJWTIssuedBeforePasswordChanged(
-        user.passwordChangedAt,
-        iat as number,
-      )
-    ) {
-      throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized !');
-    }
-
-    if (requiredRoles && !requiredRoles.includes(role)) {
-      throw new AppError(
-        httpStatus.UNAUTHORIZED,
-        'You are not authorized!',
-      );
-    }
-
-    req.user = decoded as JwtPayload & { role: string };
-    next();
   });
 };
 
 export default auth;
+
