@@ -3,7 +3,11 @@ import httpStatus from 'http-status';
 import mongoose from 'mongoose';
 import AppError from '../../errors/appError';
 import { User } from '../user/user.model';
-import { ClientProfile, LawyerProfile, JudgeProfile } from '../user/profile.model';
+import {
+  ClientProfile,
+  LawyerProfile,
+  JudgeProfile,
+} from '../user/profile.model';
 import { TOnboardPayload, TUpdateProfilePayload } from './auth.interface';
 import { generateUserId, getUserWithProfile } from './auth.utils';
 
@@ -14,7 +18,6 @@ import { generateUserId, getUserWithProfile } from './auth.utils';
 const syncUserFromClerk = async (clerkUserId: string, email: string) => {
   // Check if user already exists
   const existingUser = await User.findOne({ clerkUserId });
-
   if (existingUser) {
     // Update last login time
     existingUser.lastLoginAt = new Date();
@@ -26,7 +29,8 @@ const syncUserFromClerk = async (clerkUserId: string, email: string) => {
       email: existingUser.email,
       role: existingUser.role,
       status: existingUser.status,
-      needsOnboarding: existingUser.status === 'in-progress' || !existingUser.role,
+      needsOnboarding:
+        existingUser.status === 'in-progress' || !existingUser.role,
     };
   }
 
@@ -36,10 +40,10 @@ const syncUserFromClerk = async (clerkUserId: string, email: string) => {
   const newUser = await User.create({
     id: userId,
     clerkUserId,
-    email,
+    email: email ? email : 'advyon@gmail.com',
     role: 'client', // Temporary default, will be set during onboarding
     status: 'in-progress',
-    fullName: email.split('@')[0], // Temporary, will be updated during onboarding
+    fullName: 'Guest User', // Temporary, will be updated during onboarding
     isEmailVerified: true, // Clerk handles email verification
     needsPasswordChange: false, // Clerk handles authentication
     lastLoginAt: new Date(),
@@ -214,7 +218,8 @@ const updateUserProfile = async (
 
     // Update user fields
     if (payload.fullName) user.fullName = payload.fullName;
-    if (payload.displayName !== undefined) user.displayName = payload.displayName;
+    if (payload.displayName !== undefined)
+      user.displayName = payload.displayName;
     if (payload.avatarUrl !== undefined) user.avatarUrl = payload.avatarUrl;
     if (payload.preferredLanguage !== undefined)
       user.preferredLanguage = payload.preferredLanguage;

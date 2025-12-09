@@ -9,6 +9,7 @@ import { AuthServices } from './auth.service';
  */
 const syncUser = catchAsync(async (req, res) => {
   const { clerkUserId, email } = req.user; // From Clerk JWT
+  console.log('User', req.user);
 
   const result = await AuthServices.syncUserFromClerk(clerkUserId, email);
 
