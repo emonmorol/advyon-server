@@ -14,7 +14,7 @@ const router = express.Router();
  */
 router.post(
   '/:caseId/upload',
-  //auth(),
+  auth(),
   uploadDocument.single('file'),
   validateRequest(DocumentValidation.uploadDocumentValidation),
   DocumentControllers.uploadDocument,
@@ -27,7 +27,7 @@ router.post(
  */
 router.get(
   '/:caseId',
-  //auth(),
+  auth(),
   validateRequest(DocumentValidation.queryDocumentValidation),
   DocumentControllers.getDocuments,
 );
@@ -38,7 +38,7 @@ router.get(
  * Requires authentication
  */
 router.delete('/:caseId/:documentId', 
-  //auth(), 
+  auth(), 
   DocumentControllers.deleteDocument);
 
 export const DocumentRoutes = router;

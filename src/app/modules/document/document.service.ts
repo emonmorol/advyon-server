@@ -22,7 +22,9 @@ const uploadDocument = async (
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
-
+  console.log('user => ', user);
+  console.log('caseId => ', caseId);
+  
   // Verify case exists and user owns it
   const caseData = await Case.findOne({ id: caseId });
   if (!caseData) {

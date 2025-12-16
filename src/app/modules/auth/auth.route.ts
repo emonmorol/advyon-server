@@ -13,7 +13,7 @@ const router = express.Router();
  */
 router.post(
   '/sync',
-  //auth(), // Clerk JWT verification
+  auth(), // Clerk JWT verification
   AuthControllers.syncUser,
 );
 
@@ -24,7 +24,7 @@ router.post(
  */
 router.post(
   '/onboard',
-  //auth(), // Clerk JWT verification
+  auth(), // Clerk JWT verification
   validateRequest(AuthValidation.onboardValidation),
   AuthControllers.onboardUser,
 );
@@ -36,7 +36,7 @@ router.post(
  */
 router.get(
   '/me',
-  //auth(), // Clerk JWT verification
+  auth(), // Clerk JWT verification
   AuthControllers.getCurrentUser,
 );
 
@@ -47,7 +47,7 @@ router.get(
  */
 router.patch(
   '/me',
-  //auth(), // Clerk JWT verification
+  auth(), // Clerk JWT verification
   validateRequest(AuthValidation.updateProfileValidation),
   AuthControllers.updateProfile,
 );
