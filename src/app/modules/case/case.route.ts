@@ -13,7 +13,7 @@ const router = express.Router();
  */
 router.post(
   '/',
-  auth(),
+  //auth(),
   validateRequest(CaseValidation.createCaseValidation),
   CaseControllers.createCase,
 );
@@ -25,7 +25,7 @@ router.post(
  */
 router.get(
   '/',
-  auth(),
+  //auth(),
   validateRequest(CaseValidation.queryCaseValidation),
   CaseControllers.getAllCases,
 );
@@ -35,7 +35,9 @@ router.get(
  * Get a single case by ID
  * Requires authentication
  */
-router.get('/:caseId', auth(), CaseControllers.getCaseById);
+router.get('/:caseId', 
+  //auth(), 
+  CaseControllers.getCaseById);
 
 /**
  * PUT /cases/:caseId
@@ -44,7 +46,7 @@ router.get('/:caseId', auth(), CaseControllers.getCaseById);
  */
 router.put(
   '/:caseId',
-  auth(),
+  //auth(),
   validateRequest(CaseValidation.updateCaseValidation),
   CaseControllers.updateCase,
 );
@@ -54,6 +56,8 @@ router.put(
  * Delete a case (soft delete)
  * Requires authentication
  */
-router.delete('/:caseId', auth(), CaseControllers.deleteCase);
+router.delete('/:caseId', 
+  //auth(),
+   CaseControllers.deleteCase);
 
 export const CaseRoutes = router;
