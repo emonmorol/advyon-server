@@ -1,4 +1,30 @@
+// Processing status for AI pipeline
+export const DocumentProcessingStatus = [
+  'pending',
+  'processing',
+  'completed',
+  'failed',
+] as const;
+
+// Legacy analysis status (deprecated, use DocumentProcessingStatus)
 export const DocumentAnalysisStatus = ['pending', 'analyzed'] as const;
+
+// Auto-detected document categories
+export const DocumentCategory = [
+  'Affidavit',
+  'Evidence',
+  'Contract',
+  'Court Filing',
+  'Correspondence',
+  'Legal Brief',
+  'Pleading',
+  'Discovery',
+  'Motion',
+  'Order',
+  'Judgment',
+  'Settlement',
+  'Other',
+] as const;
 
 export const ALLOWED_FILE_TYPES = [
   'pdf',

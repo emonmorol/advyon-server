@@ -4,7 +4,11 @@ import AppError from '../../errors/appError';
 import { User } from '../user/user.model';
 import { Case } from '../case/case.model';
 import { DocumentModel } from './document.model';
-import { TDocumentQuery, TGroupedDocuments } from './document.interface';
+import {
+  TDocumentQuery,
+  TGroupedDocuments,
+  TInitiateDocumentPayload,
+} from './document.interface';
 import { generateDocumentId } from './document.utils';
 import { cloudinaryUpload } from '../../config/cloudinary.config';
 
@@ -172,8 +176,124 @@ const deleteDocument = async (
   return { message: 'Document deleted successfully' };
 };
 
+/**
+ * Initiate document upload - creates initial DB record with 'pending' status
+ * This is the first step in the Smart Document Intake pipeline
+ * @param payload - Document metadata for initial record
+ * @returns The created document ID
+ */
+const initiateDocumentUpload = async (payload: TInitiateDocumentPayload) => {
+  const { caseId, folderName, fileName, fileType, fileSize, uploaderId } =
+    payload;
+
+  // Verify user exists
+  const user = await User.findOne({ id: uploaderId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // Verify case exists and user owns it
+  const caseData = await Case.findOne({ id: caseId });
+  if (!caseData) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
+  }
+
+  if (caseData.createdBy.toString() !== user._id.toString()) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You are not authorized to upload documents to this case',
+    );
+  }
+
+  // Generate document ID
+  const documentId = await generateDocumentId();
+
+  // Create initial document record with pending status
+  const document = await DocumentModel.create({
+    id: documentId,
+    caseId: caseData._id,
+    folderName,
+    fileName,
+    fileType,
+    fileSize,
+    cloudinaryUrl: '', // Will be updated after upload
+    cloudinaryPublicId: '', // Will be updated after upload
+    cloudinaryFileId: '', // Will be updated after upload
+    processingStatus: 'pending',
+    analysisStatus: 'pending',
+    uploaderId: user._id,
+    uploadedBy: user._id,
+    uploadedAt: new Date(),
+  });
+
+  return {
+    documentId: document.id,
+    _id: document._id,
+    status: 'pending',
+  };
+};
+
+/**
+ * Update document processing status
+ * @param documentId - The document ID
+ * @param status - New processing status
+ * @param error - Optional error message if status is 'failed'
+ */
+const updateProcessingStatus = async (
+  documentId: string,
+  status: 'pending' | 'processing' | 'completed' | 'failed',
+  error?: string,
+) => {
+  const updateData: any = { processingStatus: status };
+  if (error) {
+    updateData.processingError = error;
+  }
+
+  const document = await DocumentModel.findOneAndUpdate(
+    { id: documentId },
+    updateData,
+    { new: true },
+  );
+
+  if (!document) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+  }
+
+  return document;
+};
+
+/**
+ * Update document with Cloudinary details after successful upload
+ */
+const updateCloudinaryDetails = async (
+  documentId: string,
+  cloudinaryUrl: string,
+  cloudinaryPublicId: string,
+  cloudinaryFileId: string,
+) => {
+  const document = await DocumentModel.findOneAndUpdate(
+    { id: documentId },
+    {
+      cloudinaryUrl,
+      cloudinaryPublicId,
+      cloudinaryFileId,
+      processingStatus: 'processing', // Move to processing for AI analysis
+    },
+    { new: true },
+  );
+
+  if (!document) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+  }
+
+  return document;
+};
+
 export const DocumentServices = {
   uploadDocument,
   getDocumentsByCase,
   deleteDocument,
+  initiateDocumentUpload,
+  updateProcessingStatus,
+  updateCloudinaryDetails,
 };
