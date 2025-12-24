@@ -1,7 +1,10 @@
-import pdfParse from 'pdf-parse';
+/* eslint-disable @typescript-eslint/no-var-requires */
 import mammoth from 'mammoth';
 import { geminiModel } from '../../config/gemini.config';
 import { TAiAnalysis, TDocumentCategory } from '../document/document.interface';
+
+// pdf-parse doesn't have proper ES module exports, use require
+const pdfParse = require('pdf-parse');
 
 // Valid document categories
 const VALID_CATEGORIES: TDocumentCategory[] = [
