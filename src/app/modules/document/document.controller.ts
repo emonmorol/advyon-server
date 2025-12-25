@@ -1,5 +1,6 @@
 import httpStatus from 'http-status';
 import fs from 'fs';
+import mongoose from 'mongoose';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
 import { DocumentServices } from './document.service';
@@ -9,6 +10,8 @@ import {
   uploadFileToCloudinary,
 } from '../../utils/file.upload.utils';
 import { DocumentModel } from './document.model';
+import { Case } from '../case/case.model';
+import AppError from '../../errors/appError';
 
 /**
  * Upload a document with AI analysis
@@ -39,12 +42,12 @@ const uploadDocument = catchAsync(async (req, res) => {
   console.log('=== UPLOAD DEBUG END ===');
 
   const { userId } = req.user;
-  const { caseId } = req.params;
+  const { caseId: caseIdParam } = req.params;
   const { folderName } = req.body;
   const file = req.file;
 
   // Validate caseId
-  if (!caseId) {
+  if (!caseIdParam) {
     return sendResponse(res, {
       statusCode: httpStatus.BAD_REQUEST,
       success: false,
@@ -62,11 +65,26 @@ const uploadDocument = catchAsync(async (req, res) => {
     });
   }
 
+  // Resolve case ID: might be ObjectId or custom ID (e.g., CS-2025-0047)
+  let resolvedCaseId: string = caseIdParam;
+  const isValidObjectId = mongoose.Types.ObjectId.isValid(caseIdParam);
+
+  if (!isValidObjectId) {
+    // It's a custom ID (e.g., CS-2025-0047). Find the real _id.
+    console.log(`Resolving custom case ID: ${caseIdParam}`);
+    const caseData = await Case.findOne({ id: caseIdParam });
+    if (!caseData) {
+      throw new AppError(httpStatus.NOT_FOUND, `Case not found: ${caseIdParam}`);
+    }
+    resolvedCaseId = caseData._id.toString();
+    console.log(`Resolved to ObjectId: ${resolvedCaseId}`);
+  }
+
   // Step 1: Initiate document record with 'pending' status
-  console.log('Initiating document upload with:', { caseId, folderName: folderName || 'General', fileName: file.originalname, uploaderId: userId });
+  console.log('Initiating document upload with:', { caseId: resolvedCaseId, folderName: folderName || 'General', fileName: file.originalname, uploaderId: userId });
   
   const documentInit = await DocumentServices.initiateDocumentUpload({
-    caseId,
+    caseId: resolvedCaseId,
     folderName: folderName || 'General',
     fileName: file.originalname,
     fileType: file.mimetype,
@@ -85,7 +103,7 @@ const uploadDocument = catchAsync(async (req, res) => {
     if (file.path) {
       // File is on disk
       cloudinaryResult = await uploadFileToCloudinary(file.path, {
-        folder: `advyon/cases/${caseId}/documents`,
+        folder: `advyon/cases/${caseIdParam}/documents`,
         publicIdPrefix: `doc_${documentId}`,
         resourceType: 'auto',
       });
@@ -97,7 +115,7 @@ const uploadDocument = catchAsync(async (req, res) => {
     } else if (file.buffer) {
       // File is in memory
       cloudinaryResult = await uploadBufferToCloudinary(file.buffer, {
-        folder: `advyon/cases/${caseId}/documents`,
+        folder: `advyon/cases/${caseIdParam}/documents`,
         publicIdPrefix: `doc_${documentId}`,
         resourceType: 'auto',
       });
