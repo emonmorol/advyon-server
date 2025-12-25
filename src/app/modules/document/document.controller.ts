@@ -11,6 +11,7 @@ import {
 } from '../../utils/file.upload.utils';
 import { DocumentModel } from './document.model';
 import { Case } from '../case/case.model';
+import { User } from '../user/user.model';
 import AppError from '../../errors/appError';
 
 /**
@@ -67,9 +68,9 @@ const uploadDocument = catchAsync(async (req, res) => {
 
   // Resolve case ID: might be ObjectId or custom ID (e.g., CS-2025-0047)
   let resolvedCaseId: string = caseIdParam;
-  const isValidObjectId = mongoose.Types.ObjectId.isValid(caseIdParam);
+  const isCaseValidObjectId = mongoose.Types.ObjectId.isValid(caseIdParam);
 
-  if (!isValidObjectId) {
+  if (!isCaseValidObjectId) {
     // It's a custom ID (e.g., CS-2025-0047). Find the real _id.
     console.log(`Resolving custom case ID: ${caseIdParam}`);
     const caseData = await Case.findOne({ id: caseIdParam });
@@ -77,11 +78,26 @@ const uploadDocument = catchAsync(async (req, res) => {
       throw new AppError(httpStatus.NOT_FOUND, `Case not found: ${caseIdParam}`);
     }
     resolvedCaseId = caseData._id.toString();
-    console.log(`Resolved to ObjectId: ${resolvedCaseId}`);
+    console.log(`Resolved case to ObjectId: ${resolvedCaseId}`);
+  }
+
+  // Resolve user ID: might be ObjectId or custom ID (e.g., CLI-0002)
+  let resolvedUploaderId: string = userId;
+  const isUserValidObjectId = mongoose.Types.ObjectId.isValid(userId);
+
+  if (!isUserValidObjectId) {
+    // It's a custom ID (e.g., CLI-0002). Find the real _id.
+    console.log(`Resolving custom user ID: ${userId}`);
+    const uploaderUser = await User.findOne({ id: userId });
+    if (!uploaderUser) {
+      throw new AppError(httpStatus.NOT_FOUND, `Uploader user not found: ${userId}`);
+    }
+    resolvedUploaderId = uploaderUser._id.toString();
+    console.log(`Resolved user to ObjectId: ${resolvedUploaderId}`);
   }
 
   // Step 1: Initiate document record with 'pending' status
-  console.log('Initiating document upload with:', { caseId: resolvedCaseId, folderName: folderName || 'General', fileName: file.originalname, uploaderId: userId });
+  console.log('Initiating document upload with:', { caseId: resolvedCaseId, folderName: folderName || 'General', fileName: file.originalname, uploaderId: resolvedUploaderId });
   
   const documentInit = await DocumentServices.initiateDocumentUpload({
     caseId: resolvedCaseId,
@@ -89,7 +105,7 @@ const uploadDocument = catchAsync(async (req, res) => {
     fileName: file.originalname,
     fileType: file.mimetype,
     fileSize: file.size,
-    uploaderId: userId,
+    uploaderId: resolvedUploaderId,
   });
 
   console.log('Document initiated:', documentInit);
