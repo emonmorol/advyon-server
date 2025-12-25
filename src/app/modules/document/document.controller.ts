@@ -23,10 +23,35 @@ import { DocumentModel } from './document.model';
  * 6. Return document ID immediately (don't wait for AI)
  */
 const uploadDocument = catchAsync(async (req, res) => {
+  // DEBUG: Log all incoming request details
+  console.log('=== UPLOAD DEBUG START ===');
+  console.log('Request params:', req.params);
+  console.log('Request body:', req.body);
+  console.log('Request file:', req.file ? {
+    fieldname: req.file.fieldname,
+    originalname: req.file.originalname,
+    mimetype: req.file.mimetype,
+    size: req.file.size,
+    hasBuffer: !!req.file.buffer,
+    hasPath: !!req.file.path,
+  } : 'NO FILE');
+  console.log('Request user:', req.user);
+  console.log('=== UPLOAD DEBUG END ===');
+
   const { userId } = req.user;
   const { caseId } = req.params;
   const { folderName } = req.body;
   const file = req.file;
+
+  // Validate caseId
+  if (!caseId) {
+    return sendResponse(res, {
+      statusCode: httpStatus.BAD_REQUEST,
+      success: false,
+      message: 'Missing required field: caseId',
+      data: null,
+    });
+  }
 
   if (!file) {
     return sendResponse(res, {
@@ -38,6 +63,8 @@ const uploadDocument = catchAsync(async (req, res) => {
   }
 
   // Step 1: Initiate document record with 'pending' status
+  console.log('Initiating document upload with:', { caseId, folderName: folderName || 'General', fileName: file.originalname, uploaderId: userId });
+  
   const documentInit = await DocumentServices.initiateDocumentUpload({
     caseId,
     folderName: folderName || 'General',
@@ -47,6 +74,7 @@ const uploadDocument = catchAsync(async (req, res) => {
     uploaderId: userId,
   });
 
+  console.log('Document initiated:', documentInit);
   const documentId = documentInit.documentId;
 
   // Step 2: Upload to Cloudinary (async, but we need the URL)
