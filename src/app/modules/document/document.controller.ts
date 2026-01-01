@@ -371,6 +371,32 @@ const reanalyzeDocument = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * Download a document
+ * GET /documents/:caseId/:documentId/download
+ */
+const downloadDocument = catchAsync(async (req, res) => {
+  const { documentId } = req.params;
+
+  const document = await DocumentModel.findOne({ id: documentId });
+
+  if (!document) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+  }
+
+  // In a real production app, we might proxy the file or use signed URLs
+  // For now, we'll return the Cloudinary URL for the client to download
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Download URL retrieved successfully',
+    data: {
+      downloadUrl: document.cloudinaryUrl,
+      fileName: document.fileName,
+    },
+  });
+});
+
 export const DocumentControllers = {
   uploadDocument,
   uploadDocumentLegacy,
@@ -379,4 +405,5 @@ export const DocumentControllers = {
   getDocumentStatus,
   deleteDocument,
   reanalyzeDocument,
+  downloadDocument,
 };

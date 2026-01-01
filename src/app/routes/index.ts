@@ -8,6 +8,7 @@ import { ActivityRoutes } from '../modules/activity/activity.route';
 import { InsightRoutes } from '../modules/insight/insight.route';
 import { NotificationRoutes } from '../modules/notification/notification.route';
 import { CaseAccessRoutes } from '../modules/caseAccess/caseAccess.route';
+import { MetadataRoutes } from '../modules/metadata/metadata.route';
 import { AdminRoutes } from '../modules/admin/admin.route';
 
 const router = Router();
@@ -44,6 +45,10 @@ const moduleRoutes = [
   {
     path: '/case-access',
     route: CaseAccessRoutes,
+  },
+  {
+    path: '/metadata',
+    route: MetadataRoutes,
   },
   {
     path: '/admin',

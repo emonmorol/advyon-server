@@ -79,5 +79,6 @@ router.post(
  * Requires authentication
  */
 router.delete('/:caseId/:documentId', auth(), DocumentControllers.deleteDocument);
+router.get('/:caseId/:documentId/download', auth('admin', 'superAdmin', 'lawyer', 'client'), DocumentControllers.downloadDocument);
 
 export const DocumentRoutes = router;
