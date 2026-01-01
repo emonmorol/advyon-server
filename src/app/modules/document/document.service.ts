@@ -11,6 +11,7 @@ import {
 } from './document.interface';
 import { generateDocumentId } from './document.utils';
 import { cloudinaryUpload } from '../../config/cloudinary.config';
+import { ActivityService } from '../activity/activity.service';
 
 /**
  * Upload a document to a case
@@ -59,6 +60,15 @@ const uploadDocument = async (
     analysisStatus: 'pending',
     uploadedBy: user._id,
     uploadedAt: new Date(),
+  });
+
+  // Log activity
+  await ActivityService.logActivity({
+    type: 'document_uploaded',
+    message: `Document uploaded: ${document.fileName} to folder ${folderName}`,
+    userId: user._id,
+    caseId: caseData._id,
+    documentId: document._id as any,
   });
 
   return await DocumentModel.findById(document._id)
@@ -170,6 +180,14 @@ const deleteDocument = async (
 
   // Delete from database
   await DocumentModel.findByIdAndDelete(document._id);
+
+  // Log activity
+  await ActivityService.logActivity({
+    type: 'document_deleted',
+    message: `Document deleted: ${document.fileName}`,
+    userId: user._id,
+    caseId: caseData._id,
+  });
 
   return { message: 'Document deleted successfully' };
 };

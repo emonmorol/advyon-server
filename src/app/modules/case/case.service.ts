@@ -6,6 +6,8 @@ import { TCreateCasePayload, TCaseQuery, TUpdateCasePayload } from './case.inter
 import { Case } from './case.model';
 import { generateCaseId } from './case.utils';
 import { DEFAULT_CASE_FOLDERS } from './case.constant';
+import { ActivityService } from '../activity/activity.service';
+import { CaseAccessModel } from '../caseAccess/caseAccess.model';
 
 /**
  * Create a new case
@@ -38,6 +40,14 @@ const createCase = async (userId: string, payload: TCreateCasePayload) => {
     status: 'active',
   });
 
+  // Log activity
+  await ActivityService.logActivity({
+    type: 'case_created',
+    message: `New case created: ${newCase.title} (${newCase.caseNumber})`,
+    userId: user._id,
+    caseId: newCase._id,
+  });
+
   return await Case.findById(newCase._id).populate('createdBy', 'id fullName email');
 };
 
@@ -54,7 +64,21 @@ const getAllCases = async (userId: string, query: TCaseQuery) => {
   const { search, status, urgency, page = 1, limit = 10 } = query;
 
   // Build filter
-  const filter: any = { createdBy: user._id };
+  // Find cases where user is owner OR has shared access
+  const sharedCaseAccess = await CaseAccessModel.find({ 
+    userId: user._id, 
+    status: 'active' 
+  }).select('caseId');
+  
+  const sharedCaseIds = sharedCaseAccess.map(access => access.caseId);
+  
+  const filter: any = {
+    $or: [
+      { createdBy: user._id },
+      { _id: { $in: sharedCaseIds } }
+    ],
+    isDeleted: { $ne: true }
+  };
 
   if (search) {
     filter.$or = [
@@ -151,6 +175,16 @@ const updateCase = async (
     { $set: payload },
     { new: true, runValidators: true },
   ).populate('createdBy', 'id fullName email');
+
+  // Log activity
+  if (updatedCase) {
+    await ActivityService.logActivity({
+      type: 'case_updated',
+      message: `Case updated: ${updatedCase.title}`,
+      userId: user._id,
+      caseId: updatedCase._id,
+    });
+  }
 
   return updatedCase;
 };
