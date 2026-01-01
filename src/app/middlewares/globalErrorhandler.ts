@@ -62,13 +62,28 @@ const globalErrorHandler: ErrorRequestHandler = (err, req, res, next) => {
   }
 
   //ultimate return
-  return res.status(statusCode).json({
+  const response: {
+    success: boolean;
+    message: string;
+    errorSources: TErrorSources;
+    stack?: string;
+    error?: any;
+  } = {
     success: false,
-    message,
+    message: message || 'Internal Server Error',
     errorSources,
-    err,
-    stack: config.NODE_ENV === 'development' ? err?.stack : null,
-  });
+    stack: config.NODE_ENV === 'development' ? err?.stack : undefined,
+  };
+
+  // Only include full error object in development
+  if (config.NODE_ENV === 'development') {
+    response.error = {
+      name: err.name,
+      message: err.message,
+    };
+  }
+
+  return res.status(statusCode).json(response);
 };
 
 export default globalErrorHandler;

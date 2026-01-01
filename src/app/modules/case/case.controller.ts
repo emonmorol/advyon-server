@@ -8,7 +8,6 @@ import { CaseServices } from './case.service';
  * POST /cases
  */
 const createCase = catchAsync(async (req, res) => {
-  console.log('req.user => ', req);
   const { userId } = req.user;
 
   const result = await CaseServices.createCase(userId, req.body);

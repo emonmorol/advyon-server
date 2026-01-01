@@ -12,9 +12,10 @@ const auth = (...requiredRoles: TUserRole[]) => {
   return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
 
+    console.log('authHeader',authHeader);
+    
     // Check if authorization header exists
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log('authHeader => ', authHeader);
       throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized!');
     }
 
@@ -27,15 +28,14 @@ const auth = (...requiredRoles: TUserRole[]) => {
         secretKey: config.clerk_secret_key as string,
         issuer: (iss) => iss.startsWith('https://'), // Accept any Clerk issuer
       });
-      console.log('decoded => ', decoded);
 
       // Extract Clerk user data from JWT
       const clerkUserId = decoded.sub;
-      const email = decoded.email as string;
-      console.log('email => ', email);
-
+      
+      
       // Find user in database by Clerk ID
       let user = await User.findOne({ clerkUserId });
+      const email = user?.email as string;
 
       if (!user) {
         // For /auth/sync endpoint, allow non-existent users
@@ -68,12 +68,18 @@ const auth = (...requiredRoles: TUserRole[]) => {
       }
 
       // Check role-based access
-      // if (requiredRoles.length > 0 && !requiredRoles.includes(user.role as TUserRole)) {
-      //   throw new AppError(
-      //     httpStatus.UNAUTHORIZED,
-      //     'You are not authorized!',
-      //   );
-      // }
+      console.log('requiredRoles.length',requiredRoles.length);
+      console.log('user',user);
+      
+      if (
+        requiredRoles.length > 0 &&
+        !requiredRoles.includes(user.role as TUserRole)
+      ) {
+        throw new AppError(
+          httpStatus.FORBIDDEN,
+          'You are not authorized to access this resource!',
+        );
+      }
 
       // Attach user data to request
       req.user = {
@@ -86,7 +92,6 @@ const auth = (...requiredRoles: TUserRole[]) => {
 
       next();
     } catch (error: any) {
-      console.log('error => ', error);
       // Handle Clerk verification errors
       if (error.message?.includes('expired')) {
         throw new AppError(httpStatus.UNAUTHORIZED, 'Token has expired!');

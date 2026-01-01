@@ -17,31 +17,31 @@ const router = express.Router();
 // GET /admin/users
 router.get(
   '/users',
-  //auth('admin', 'superAdmin'),
-  //validateRequest(getUsersQuerySchema),
+  auth('admin', 'superAdmin'),
+  validateRequest(getUsersQuerySchema),
   AdminController.getAllUsers,
 );
 
 // GET /admin/users/:id
 router.get(
   '/users/:id',
-  //auth('admin', 'superAdmin'),
-  //validateRequest(getUserParamsSchema),
+  auth('admin', 'superAdmin'),
+  validateRequest(getUserParamsSchema),
   AdminController.getSingleUser,
 );
 
 // PATCH /admin/users/:id/role
 router.patch(
   '/users/:id/role',
-  //auth('superAdmin'),
-  // validateRequest(updateUserRoleSchema),
+  auth('superAdmin'),
+  validateRequest(updateUserRoleSchema),
   AdminController.updateUserRole,
 );
 
 // PATCH /admin/users/:id/status
 router.patch(
   '/users/:id/status',
-  //auth('admin', 'superAdmin'),
+  auth('admin', 'superAdmin'),
   validateRequest(updateUserStatusSchema),
   AdminController.updateUserStatus,
 );
@@ -49,7 +49,7 @@ router.patch(
 // DELETE /admin/users/:id (soft delete)
 router.delete(
   '/users/:id',
-  //auth('superAdmin'),
+  auth('superAdmin'),
   validateRequest(deleteUserParamsSchema),
   AdminController.softDeleteUser,
 );

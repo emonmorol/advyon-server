@@ -27,21 +27,6 @@ import AppError from '../../errors/appError';
  * 6. Return document ID immediately (don't wait for AI)
  */
 const uploadDocument = catchAsync(async (req, res) => {
-  // DEBUG: Log all incoming request details
-  console.log('=== UPLOAD DEBUG START ===');
-  console.log('Request params:', req.params);
-  console.log('Request body:', req.body);
-  console.log('Request file:', req.file ? {
-    fieldname: req.file.fieldname,
-    originalname: req.file.originalname,
-    mimetype: req.file.mimetype,
-    size: req.file.size,
-    hasBuffer: !!req.file.buffer,
-    hasPath: !!req.file.path,
-  } : 'NO FILE');
-  console.log('Request user:', req.user);
-  console.log('=== UPLOAD DEBUG END ===');
-
   const { userId } = req.user;
   const { caseId: caseIdParam } = req.params;
   const { folderName } = req.body;
@@ -72,13 +57,11 @@ const uploadDocument = catchAsync(async (req, res) => {
 
   if (!isCaseValidObjectId) {
     // It's a custom ID (e.g., CS-2025-0047). Find the real _id.
-    console.log(`Resolving custom case ID: ${caseIdParam}`);
     const caseData = await Case.findOne({ id: caseIdParam });
     if (!caseData) {
       throw new AppError(httpStatus.NOT_FOUND, `Case not found: ${caseIdParam}`);
     }
     resolvedCaseId = caseData._id.toString();
-    console.log(`Resolved case to ObjectId: ${resolvedCaseId}`);
   }
 
   // Resolve user ID: might be ObjectId or custom ID (e.g., CLI-0002)
@@ -87,18 +70,13 @@ const uploadDocument = catchAsync(async (req, res) => {
 
   if (!isUserValidObjectId) {
     // It's a custom ID (e.g., CLI-0002). Find the real _id.
-    console.log(`Resolving custom user ID: ${userId}`);
     const uploaderUser = await User.findOne({ id: userId });
     if (!uploaderUser) {
       throw new AppError(httpStatus.NOT_FOUND, `Uploader user not found: ${userId}`);
     }
     resolvedUploaderId = uploaderUser._id.toString();
-    console.log(`Resolved user to ObjectId: ${resolvedUploaderId}`);
   }
 
-  // Step 1: Initiate document record with 'pending' status
-  console.log('Initiating document upload with:', { caseId: resolvedCaseId, folderName: folderName || 'General', fileName: file.originalname, uploaderId: resolvedUploaderId });
-  
   const documentInit = await DocumentServices.initiateDocumentUpload({
     caseId: resolvedCaseId,
     folderName: folderName || 'General',
@@ -108,7 +86,6 @@ const uploadDocument = catchAsync(async (req, res) => {
     uploaderId: resolvedUploaderId,
   });
 
-  console.log('Document initiated:', documentInit);
   const documentId = documentInit.documentId;
 
   // Step 2: Upload to Cloudinary (async, but we need the URL)
