@@ -5,6 +5,24 @@ import httpStatus from 'http-status';
 
 const router = express.Router();
 
+/**
+ * @swagger
+ * tags:
+ *   name: Metadata
+ *   description: System metadata (Practice Areas, Languages)
+ */
+
+/**
+ * @swagger
+ * /metadata/practice-areas:
+ *   get:
+ *     summary: Get practice areas
+ *     description: Retrieves a list of available legal practice areas.
+ *     tags: [Metadata]
+ *     responses:
+ *       200:
+ *         description: List of practice areas
+ */
 router.get('/practice-areas', (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -14,6 +32,17 @@ router.get('/practice-areas', (req, res) => {
   });
 });
 
+/**
+ * @swagger
+ * /metadata/languages:
+ *   get:
+ *     summary: Get languages
+ *     description: Retrieves a list of supported languages.
+ *     tags: [Metadata]
+ *     responses:
+ *       200:
+ *         description: List of languages
+ */
 router.get('/languages', (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,

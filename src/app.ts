@@ -7,6 +7,8 @@ import cors from 'cors';
 import express, { Application, Request, Response } from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './app/config/swagger.config';
 import globalErrorHandler from './app/middlewares/globalErrorhandler';
 import notFound from './app/middlewares/notFound';
 import router from './app/routes';
@@ -86,6 +88,9 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 app.use(globalErrorHandler);
+
+// Swagger Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 //Not Found
 app.use(notFound);
