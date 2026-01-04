@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/no-var-requires */
+/* eslint-disable @typescript-eslint/no-var-requires, no-undef */
+import { Buffer } from 'buffer';
 import mammoth from 'mammoth';
 import { geminiModel } from '../../config/gemini.config';
 import { TAiAnalysis, TDocumentCategory } from '../document/document.interface';
@@ -25,7 +26,10 @@ const VALID_CATEGORIES: TDocumentCategory[] = [
 
 // Default/fallback AI analysis result
 const DEFAULT_AI_ANALYSIS: TAiAnalysis = {
-  summary: 'Unable to analyze document content.',
+  summary: {
+    refined: 'Unable to analyze document content.',
+    raw: 'Unable to analyze document content.',
+  },
   extractedEntities: [],
   documentCategory: 'Other',
   confidenceScore: 0,
@@ -43,7 +47,10 @@ const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
   if (!fileText || fileText.trim().length < 10) {
     return {
       ...DEFAULT_AI_ANALYSIS,
-      summary: 'Document contains insufficient text for analysis.',
+      summary: {
+        refined: 'Document contains insufficient text for analysis.',
+        raw: 'Document contains insufficient text for analysis.',
+      },
     };
   }
 
@@ -96,11 +103,15 @@ JSON RESPONSE:`;
     const parsedResult = JSON.parse(cleanedResponse);
 
     // Validate and sanitize the response
-    const analysis: TAiAnalysis = {
-      summary:
-        typeof parsedResult.summary === 'string'
+    const summaryText = typeof parsedResult.summary === 'string'
           ? parsedResult.summary.substring(0, 1000)
-          : DEFAULT_AI_ANALYSIS.summary,
+          : DEFAULT_AI_ANALYSIS.summary.refined;
+
+    const analysis: TAiAnalysis = {
+      summary: {
+        refined: summaryText,
+        raw: summaryText, // Use same text for raw unless we want to distinguish later
+      },
       extractedEntities: Array.isArray(parsedResult.extractedEntities)
         ? parsedResult.extractedEntities
             .filter((e: unknown) => typeof e === 'string')
@@ -127,10 +138,12 @@ JSON RESPONSE:`;
     // Return fallback object instead of throwing
     return {
       ...DEFAULT_AI_ANALYSIS,
-      summary:
-        error instanceof SyntaxError
+      summary: {
+        refined: error instanceof SyntaxError
           ? 'Failed to parse AI response. Document may require manual review.'
           : 'AI analysis encountered an error. Please try again later.',
+        raw: '',
+      },
     };
   }
 };

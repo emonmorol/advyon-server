@@ -1,55 +1,100 @@
+import httpStatus from 'http-status';
+import AppError from '../../errors/appError';
+import { DocumentModel } from '../document/document.model';
+import { GeminiService } from '../gemini/gemini.service';
+import { DocumentServices } from '../document/document.service';
+import { Buffer } from 'buffer';
 import {
   TChatRequest,
   TChatResponse,
   TDocumentAnalysisResponse,
 } from './ai.interface';
+import { geminiModel } from '../../config/gemini.config';
 
 const processChat = async (payload: TChatRequest): Promise<TChatResponse> => {
-  // Mock response for now as per requirements to setup the structure
-  // In a real implementation, this would call the GeminiService or similar
-  return {
-    response: `# Analysis for Case ${payload.caseId || 'Unknown'}\n\nBased on the context provided, here is a summary of the situation... \n\n**Key Observations:**\n\n1. Point one\n2. Point two`,
-    suggestedActions: [
-      {
-        label: 'View Related Document',
-        action: 'navigate',
-        payload: { id: 'doc_123' },
-      },
-      {
-        label: 'Schedule Hearing',
-        action: 'open_modal',
-        payload: { id: 'schedule_hearing' },
-      },
-    ],
-  };
+  try {
+    const { message, history } = payload;
+    
+    // Construct chat history for Gemini
+    // Note: Gemini API expects history in a specific format if using startChat
+    // For simplicity with generateContent, we'll append history to prompt or use startChat if applicable
+    
+    const chat = geminiModel.startChat({
+        history: history.map(msg => ({
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: msg.content }]
+        }))
+    });
+
+    const result = await chat.sendMessage(message);
+    const response = result.response;
+    const text = response.text();
+
+    return {
+      response: text,
+      suggestedActions: [], // Gemini doesn't inherently suggest actions without specific prompting instructions
+    };
+  } catch (error) {
+    console.error('Chat processing error:', error);
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to process chat message');
+  }
 };
 
-const analyzeDocument = async (): Promise<TDocumentAnalysisResponse> => {
-  // Mock response for now
-  return {
-    summary: {
-            refined: 'This document outlines the partnership agreement between Party A and Party B. Key terms include profit sharing, dispute resolution, and termination clauses.',
-            raw: 'Agreement made on... between... whereas... now therefore...',
-    },
-    entities: [
-      { type: 'person', name: 'John Doe', count: 3 },
-      { type: 'organization', name: 'Acme Corp', count: 5 },
-      { type: 'date', name: '2023-01-01', count: 1 },
-      { type: 'amount', name: '$50,000', count: 2 },
-    ],
-    keyPoints: [
-      { id: 1, text: 'Profit sharing is 50/50', importance: 'high' },
-      { id: 2, text: 'Termination requires 30 days notice', importance: 'medium' },
-      { id: 3, text: 'Jurisdiction in NY', importance: 'low' },
-    ],
-    legalRefs: [
-      {
-        citation: 'Section 404',
-        description: 'Standard liability clause',
-        relevance: 'high',
-      },
-    ],
-  };
+const analyzeDocument = async (documentId: string): Promise<TDocumentAnalysisResponse> => {
+  const document = await DocumentModel.findOne({ id: documentId });
+  if (!document) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+  }
+
+  if (!document.cloudinaryUrl) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Document has no file URL');
+  }
+
+  try {
+    // Update status to processing
+    await DocumentServices.updateProcessingStatus(documentId, 'processing');
+
+    // Fetch file content
+    const fileResponse = await fetch(document.cloudinaryUrl);
+    if (!fileResponse.ok) {
+        throw new Error(`Failed to fetch file: ${fileResponse.statusText}`);
+    }
+    
+    const arrayBuffer = await fileResponse.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const mimeType = document.fileType === 'pdf' ? 'application/pdf' : 
+                     document.fileType === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 
+                     'text/plain'; // Fallback
+
+    // Extract text
+    const text = await GeminiService.extractTextFromDocument(buffer, mimeType);
+    
+    // Analyze with Gemini
+    const analysis = await GeminiService.analyzeLegalDocument(text);
+
+    // Update document with analysis results
+    document.aiAnalysis = analysis;
+    document.processingStatus = 'completed';
+    document.analysisStatus = 'analyzed'; // Legacy field support, corrected enum value
+    await document.save();
+
+    return {
+        summary: analysis.summary, // Now passing the full object directly
+        entities: analysis.extractedEntities.map(entity => ({
+            type: 'organization', // Default mapping
+            name: entity,
+            count: 1
+        })),
+        keyPoints: [],
+        legalRefs: [],
+    };
+
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Document analysis failed for ${documentId}:`, error);
+    await DocumentServices.updateProcessingStatus(documentId, 'failed', errorMessage);
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, `Analysis failed: ${errorMessage}`);
+  }
 };
 
 export const AIServices = {

@@ -15,8 +15,13 @@ const chat = catchAsync(async (req, res) => {
 });
 
 const analyzeDocument = catchAsync(async (req, res) => {
-    // Note: The request might contain document details or content, currently just mapping response
-  const result = await AIServices.analyzeDocument();
+  const { documentId } = req.body;
+
+  if (!documentId) {
+    throw new Error('Document ID is required');
+  }
+
+  const result = await AIServices.analyzeDocument(documentId);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
