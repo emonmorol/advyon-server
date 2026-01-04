@@ -118,10 +118,46 @@ const deleteUser = async (id: string) => {
   return result;
 };
 
+
+const getMyProfile = async (userId: string) => {
+  const user = await User.findOne({ id: userId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // Fetch basic details
+  const profile: any = {
+    email: user.email,
+    displayName: user.displayName || user.fullName,
+    phone: '', // Placeholder
+    address: '', // Placeholder
+  };
+
+  // Try to fetch additional details from role-specific profiles
+  // This is a simplified lookup; in a real app, we'd use the relationship
+  // Assuming the user.id is the link or user._id
+  let roleProfile: any;
+  if (user.role === 'client') {
+    roleProfile = await ClientProfile.findOne({ id: userId });
+  } else if (user.role === 'lawyer') {
+    roleProfile = await LawyerProfile.findOne({ id: userId });
+  } else if (user.role === 'judge') {
+    roleProfile = await JudgeProfile.findOne({ id: userId });
+  }
+
+  if (roleProfile) {
+    profile.phone = roleProfile.phoneNumber || roleProfile.contactNumber || '';
+    profile.address = roleProfile.address || '';
+  }
+
+  return profile;
+};
+
 export const UserServices = {
   createUser,
   getAllUsers,
   getSingleUser,
   updateUser,
   deleteUser,
+  getMyProfile,
 };

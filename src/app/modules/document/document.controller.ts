@@ -3,7 +3,6 @@ import fs from 'fs';
 import mongoose from 'mongoose';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
-import { DocumentServices } from './document.service';
 import { GeminiService } from '../gemini/gemini.service';
 import {
   uploadBufferToCloudinary,
@@ -13,6 +12,7 @@ import { DocumentModel } from './document.model';
 import { Case } from '../case/case.model';
 import { User } from '../user/user.model';
 import AppError from '../../errors/appError';
+import { DocumentServices } from './document.service';
 
 /**
  * Upload a document with AI analysis
@@ -246,12 +246,58 @@ const getDocuments = catchAsync(async (req, res) => {
     req.query,
   );
 
+  // Map to required format
+  const mappedDocuments = result.documents.map((doc: any) => ({
+    id: doc.id,
+    name: doc.fileName,
+    type: doc.fileType, // simplified mapping, frontend might need 'pdf'|'doc'|'video'
+    date: new Date(doc.uploadedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
+    status: doc.analysisStatus === 'analyzed' ? 'analyzed' : 'processing', // mapping status
+  }));
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Documents retrieved successfully',
-    data: result,
+    data: mappedDocuments,
   });
+});
+
+/**
+ * Get document content for viewer
+ * GET /documents/:id/content
+ */
+const getDocumentContent = catchAsync(async (req, res) => {
+    const { documentId } = req.params; // Make sure route param matches
+    
+    // logic to get url. reusing existing service or just finding doc
+    const document = await DocumentModel.findOne({ id: documentId });
+    if (!document) {
+        throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+    }
+
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: 'Document content retrieved',
+        data: { url: document.cloudinaryUrl }
+    });
+});
+
+/**
+ * Update document summary
+ * PUT /documents/:id/summary
+ */
+const updateDocumentSummary = catchAsync(async (req, res) => {
+    const { documentId } = req.params;
+    const result = await DocumentServices.updateSummary(documentId, req.body);
+
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: 'Document summary updated',
+        data: result
+    });
 });
 
 /**
@@ -406,4 +452,6 @@ export const DocumentControllers = {
   deleteDocument,
   reanalyzeDocument,
   downloadDocument,
+  getDocumentContent,
+  updateDocumentSummary,
 };

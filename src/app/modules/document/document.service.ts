@@ -305,6 +305,44 @@ const updateCloudinaryDetails = async (
   return document;
 };
 
+
+
+/**
+ * Update document summary (refined or raw)
+ */
+const updateSummary = async (documentId: string, payload: { rawSummary?: string, refinedSummary?: string, type: 'raw' | 'refined' }) => {
+    const document = await DocumentModel.findOne({ id: documentId });
+    if (!document) {
+        throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+    }
+
+    // Initialize aiAnalysis if needed
+    if (!document.aiAnalysis) {
+        // Create default structure if missing
+        document.aiAnalysis = {
+            summary: { raw: '', refined: '' },
+            extractedEntities: [],
+            documentCategory: null,
+            confidenceScore: 0
+        };
+    }
+    // Ensure summary object exists
+    if (!document.aiAnalysis.summary) {
+        document.aiAnalysis.summary = { raw: '', refined: '' };
+    }
+
+    if (payload.type === 'raw' && payload.rawSummary) {
+        document.aiAnalysis.summary.raw = payload.rawSummary;
+    } else if (payload.type === 'refined' && payload.refinedSummary) {
+        document.aiAnalysis.summary.refined = payload.refinedSummary;
+    }
+
+    // Mark modified because we are modifying a mixed/nested path that mongoose might not track automatically if strict is false
+    document.markModified('aiAnalysis');
+    
+    await document.save();
+    return document;
+};
 export const DocumentServices = {
   uploadDocument,
   getDocumentsByCase,
@@ -312,4 +350,5 @@ export const DocumentServices = {
   initiateDocumentUpload,
   updateProcessingStatus,
   updateCloudinaryDetails,
+  updateSummary,
 };

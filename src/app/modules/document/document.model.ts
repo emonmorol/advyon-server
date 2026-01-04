@@ -10,8 +10,14 @@ import {
 const aiAnalysisSchema = new Schema<TAiAnalysis>(
   {
     summary: {
-      type: String,
-      default: '',
+      refined: {
+        type: String,
+        default: '',
+      },
+      raw: {
+        type: String,
+        default: '',
+      },
     },
     extractedEntities: {
       type: [String],

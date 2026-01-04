@@ -30,7 +30,10 @@ export type TDocumentCategory =
 
 // AI Analysis results structure
 export interface TAiAnalysis {
-  summary: string; // AI-generated document summary
+  summary: {
+    refined: string;
+    raw: string;
+  }; // AI-generated document summary
   extractedEntities: string[]; // Names, Dates, Locations found
   documentCategory: TDocumentCategory | null; // Auto-detected category
   confidenceScore: number; // AI confidence (0-1)

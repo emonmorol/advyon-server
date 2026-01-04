@@ -10,6 +10,9 @@ import { NotificationRoutes } from '../modules/notification/notification.route';
 import { CaseAccessRoutes } from '../modules/caseAccess/caseAccess.route';
 import { MetadataRoutes } from '../modules/metadata/metadata.route';
 import { AdminRoutes } from '../modules/admin/admin.route';
+import { AIRoutes } from '../modules/ai/ai.route';
+import { DashboardRoutes } from '../modules/dashboard/dashboard.route';
+import { CommunityRoutes } from '../modules/community/community.route';
 
 const router = Router();
 
@@ -53,6 +56,18 @@ const moduleRoutes = [
   {
     path: '/admin',
     route: AdminRoutes,
+  },
+  {
+    path: '/ai',
+    route: AIRoutes,
+  },
+  {
+    path: '/dashboard',
+    route: DashboardRoutes,
+  },
+  {
+    path: '/community',
+    route: CommunityRoutes,
   },
 ];
 
