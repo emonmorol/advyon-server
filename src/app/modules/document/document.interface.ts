@@ -45,13 +45,14 @@ export interface TAiAnalysis {
 export interface TDocument extends Document {
   id: string;
   caseId: Types.ObjectId;
-  folderName: string;
-  fileName: string;
-  fileType: string;
+  folder: string;
+  originalName: string;
+  mimeType: string;
   fileSize: number;
-  cloudinaryUrl: string;
+  storagePath: string;
   cloudinaryPublicId: string;
   cloudinaryFileId: string; // For secure deletion
+  description?: string;
 
   // Processing status (new AI pipeline)
   processingStatus: TDocumentProcessingStatus;
@@ -76,18 +77,19 @@ export interface TDocument extends Document {
 // Upload document payload
 export interface TUploadDocumentPayload {
   caseId: string;
-  folderName: string;
+  folder: string;
+  description?: string;
   file: Express.Multer.File;
 }
 
-// Initiate document upload payload (for service shell)
 export interface TInitiateDocumentPayload {
   caseId: string;
-  folderName: string;
-  fileName: string;
-  fileType: string;
+  folder: string;
+  originalName: string;
+  mimeType: string;
   fileSize: number;
   uploaderId: string;
+  description?: string;
 }
 
 // Query parameters for filtering documents
@@ -98,5 +100,5 @@ export interface TDocumentQuery {
 
 // Grouped documents by folder
 export interface TGroupedDocuments {
-  [folderName: string]: TDocument[];
+  [folder: string]: TDocument[];
 }

@@ -46,7 +46,7 @@ const analyzeDocument = async (documentId: string): Promise<TDocumentAnalysisRes
     throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
   }
 
-  if (!document.cloudinaryUrl) {
+  if (!document.storagePath) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Document has no file URL');
   }
 
@@ -55,16 +55,14 @@ const analyzeDocument = async (documentId: string): Promise<TDocumentAnalysisRes
     await DocumentServices.updateProcessingStatus(documentId, 'processing');
 
     // Fetch file content
-    const fileResponse = await fetch(document.cloudinaryUrl);
+    const fileResponse = await fetch(document.storagePath);
     if (!fileResponse.ok) {
         throw new Error(`Failed to fetch file: ${fileResponse.statusText}`);
     }
     
     const arrayBuffer = await fileResponse.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const mimeType = document.fileType === 'pdf' ? 'application/pdf' : 
-                     document.fileType === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 
-                     'text/plain'; // Fallback
+    const mimeType = document.mimeType || 'text/plain'; // Use stored mimeType or fallback
 
     // Extract text
     const text = await GeminiService.extractTextFromDocument(buffer, mimeType);

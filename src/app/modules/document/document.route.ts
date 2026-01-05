@@ -7,42 +7,12 @@ import { uploadDocument } from '../../config/document-upload.config';
 
 const router = express.Router();
 
-/**
- * POST /documents/:caseId/upload
- * Upload a document to a case with AI analysis
- * Requires authentication and file upload
- */
-router.post(
-  '/:caseId/upload',
-  auth(),
-  uploadDocument.single('file'),
-  validateRequest(DocumentValidation.uploadDocumentValidation),
-  DocumentControllers.uploadDocument,
-);
+// Routes specific to Documents that don't fit well under /cases/:caseId (e.g. actions on a specific document regardless of case context, or if API design prefers global document access)
+// However, most document actions are better accessed via /cases routes.
+// We'll keep specific single-document operations here if they are not redundant with case.route.ts functionality.
 
-/**
- * POST /documents/:caseId/upload-legacy
- * Legacy upload without AI analysis
- */
-router.post(
-  '/:caseId/upload-legacy',
-  auth(),
-  uploadDocument.single('file'),
-  validateRequest(DocumentValidation.uploadDocumentValidation),
-  DocumentControllers.uploadDocumentLegacy,
-);
-
-/**
- * GET /documents/:caseId
- * Get all documents for a case
- * Requires authentication
- */
-router.get(
-  '/:caseId',
-  auth(),
-  validateRequest(DocumentValidation.queryDocumentValidation),
-  DocumentControllers.getDocuments,
-);
+// Note: /api/v1/cases/:caseId/documents is now the primary way to upload and list documents.
+// These are removed to avoid duplication.
 
 /**
  * GET /documents/:caseId/:documentId

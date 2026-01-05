@@ -29,7 +29,7 @@ import { DocumentServices } from './document.service';
 const uploadDocument = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { caseId: caseIdParam } = req.params;
-  const { folderName } = req.body;
+  const { folder, description } = req.body;
   const file = req.file;
 
   // Validate caseId
@@ -79,11 +79,12 @@ const uploadDocument = catchAsync(async (req, res) => {
 
   const documentInit = await DocumentServices.initiateDocumentUpload({
     caseId: resolvedCaseId,
-    folderName: folderName || 'General',
-    fileName: file.originalname,
-    fileType: file.mimetype,
+    folder: folder || 'General',
+    originalName: file.originalname,
+    mimeType: file.mimetype,
     fileSize: file.size,
     uploaderId: resolvedUploaderId,
+    description: description || '',
   });
 
   const documentId = documentInit.documentId;
@@ -134,15 +135,24 @@ const uploadDocument = catchAsync(async (req, res) => {
       .populate('uploadedBy', 'id fullName email')
       .populate('caseId', 'id caseNumber title');
 
+    const responseData = {
+        id: document?.id,
+        caseId: document?.caseId instanceof mongoose.Types.ObjectId ? (document?.caseId as any).id : (document?.caseId as any).caseNumber,
+        name: document?.originalName,
+        url: document?.storagePath,
+        type: document?.mimeType,
+        size: document?.fileSize,
+        folder: document?.folder,
+        uploadedAt: document?.uploadedAt,
+        processingStatus: 'queued',
+        analysisId: null
+    };
+
     sendResponse(res, {
-      statusCode: httpStatus.CREATED,
+      statusCode: httpStatus.OK, // User requested 200 OK
       success: true,
-      message: 'Document uploaded successfully. AI analysis in progress.',
-      data: {
-        document,
-        processingStatus: 'processing',
-        message: 'AI analysis is running in the background. Poll for updates.',
-      },
+      message: 'Document uploaded successfully', // Added message field for consistency
+      data: responseData,
     });
   } catch (error) {
     // Update status to failed if upload fails
@@ -205,7 +215,7 @@ async function processDocumentWithAI(
 const uploadDocumentLegacy = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { caseId } = req.params;
-  const { folderName } = req.body;
+  const { folder } = req.body;
   const file = req.file;
 
   if (!file) {
@@ -221,7 +231,7 @@ const uploadDocumentLegacy = catchAsync(async (req, res) => {
     caseId,
     userId,
     file,
-    folderName,
+    folder,
   );
 
   sendResponse(res, {
@@ -247,18 +257,20 @@ const getDocuments = catchAsync(async (req, res) => {
   );
 
   // Map to required format
+  // Map to required format matching user request
   const mappedDocuments = result.documents.map((doc: any) => ({
-    id: doc.id,
-    name: doc.fileName,
-    type: doc.fileType, // simplified mapping, frontend might need 'pdf'|'doc'|'video'
-    date: new Date(doc.uploadedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
-    status: doc.analysisStatus === 'analyzed' ? 'analyzed' : 'processing', // mapping status
+      id: doc.id,
+      name: doc.originalName,
+      folder: doc.folder,
+      uploadedAt: doc.uploadedAt,
+      processingStatus: doc.processingStatus === 'pending' ? 'queued' : doc.processingStatus,
+      confidenceScore: doc.aiAnalysis?.confidenceScore,
+      documentCategory: doc.aiAnalysis?.documentCategory
   }));
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Documents retrieved successfully',
     data: mappedDocuments,
   });
 });
@@ -280,7 +292,7 @@ const getDocumentContent = catchAsync(async (req, res) => {
         statusCode: httpStatus.OK,
         success: true,
         message: 'Document content retrieved',
-        data: { url: document.cloudinaryUrl }
+        data: { url: document.storagePath }
     });
 });
 
@@ -352,12 +364,17 @@ const getDocumentStatus = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Document status retrieved',
     data: {
-      processingStatus: document.processingStatus,
-      processingError: document.processingError,
-      aiAnalysis: document.aiAnalysis,
-      isComplete: document.processingStatus === 'completed',
+        id: document.id,
+        processingStatus: document.processingStatus === 'pending' ? 'queued' : document.processingStatus,
+        aiAnalysis: document.aiAnalysis ? {
+            summary: document.aiAnalysis.summary.refined,
+            documentCategory: document.aiAnalysis.documentCategory,
+            confidenceScore: document.aiAnalysis.confidenceScore,
+            entities: document.aiAnalysis.extractedEntities,
+            riskScore: 0.1 // Mock risk score as it's not in our schema yet
+        } : null,
+        error: document.processingError || null
     },
   });
 });
@@ -437,8 +454,8 @@ const downloadDocument = catchAsync(async (req, res) => {
     success: true,
     message: 'Download URL retrieved successfully',
     data: {
-      downloadUrl: document.cloudinaryUrl,
-      fileName: document.fileName,
+      downloadUrl: document.storagePath,
+      fileName: document.originalName,
     },
   });
 });

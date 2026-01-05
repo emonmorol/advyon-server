@@ -715,16 +715,16 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test('Status code is 201', function () {",
-									"    pm.response.to.have.status(201);",
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
 									"});",
 									"",
 									"pm.test('Document uploaded successfully', function () {",
 									"    var jsonData = pm.response.json();",
 									"    pm.expect(jsonData.success).to.be.true;",
 									"    pm.expect(jsonData.data).to.have.property('id');",
-									"    pm.expect(jsonData.data).to.have.property('fileName');",
-									"    pm.expect(jsonData.data).to.have.property('cloudinaryUrl');",
+									"    pm.expect(jsonData.data).to.have.property('name');",
+									"    pm.expect(jsonData.data).to.have.property('url');",
 									"    ",
 									"    // Save document ID for later requests",
 									"    pm.environment.set('documentId', jsonData.data.id);",
@@ -753,18 +753,23 @@
 									"description": "Select a file to upload (PDF, DOC, DOCX, JPG, PNG)"
 								},
 								{
-									"key": "folderName",
+									"key": "folder",
 									"value": "{{documentFolder}}",
+									"type": "text"
+								},
+								{
+									"key": "description",
+									"value": "Document upload description",
 									"type": "text"
 								}
 							]
 						},
 						"url": {
-							"raw": "{{base_url}}/api/v1/documents/{{caseId}}/upload",
+							"raw": "{{base_url}}/api/v1/cases/{{caseId}}/documents",
 							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "documents", "{{caseId}}", "upload"]
+							"path": ["api", "v1", "cases", "{{caseId}}", "documents"]
 						},
-						"description": "Upload a document to a specific case folder. Requires multipart/form-data with file and folderName."
+						"description": "Upload a document to a specific case folder. Requires multipart/form-data with file, folder, and description."
 					},
 					"response": []
 				},
@@ -781,7 +786,7 @@
 									"",
 									"pm.test('Response contains documents', function () {",
 									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.data).to.be.an('object');",
+									"    pm.expect(jsonData.data).to.be.an('array');",
 									"});"
 								],
 								"type": "text/javascript"
@@ -798,9 +803,9 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/v1/documents/{{caseId}}",
+							"raw": "{{base_url}}/api/v1/cases/{{caseId}}/documents",
 							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "documents", "{{caseId}}"],
+							"path": ["api", "v1", "cases", "{{caseId}}", "documents"],
 							"query": [
 								{
 									"key": "folder",
@@ -810,6 +815,44 @@
 							]
 						},
 						"description": "Get all documents for a case, optionally filtered by folder"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Document Status",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains status', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data).to.have.property('processingStatus');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{clerkToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/cases/{{caseId}}/documents/{{documentId}}/status",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "cases", "{{caseId}}", "documents", "{{documentId}}", "status"]
+						},
+						"description": "Get AI processing status for a document"
 					},
 					"response": []
 				},

@@ -20,7 +20,7 @@ const uploadDocument = async (
   caseId: string,
   userId: string,
   file: Express.Multer.File,
-  folderName: string,
+  folder: string,
 ) => {
   // Verify user exists
   const user = await User.findOne({ id: userId });
@@ -51,11 +51,11 @@ const uploadDocument = async (
   const document = await DocumentModel.create({
     id: documentId,
     caseId: caseData._id,
-    folderName,
-    fileName: file.originalname,
-    fileType,
+    folder,
+    originalName: file.originalname,
+    mimeType: fileType,
     fileSize: file.size,
-    cloudinaryUrl: (file as any).path, // Cloudinary URL
+    storagePath: (file as any).path, // Cloudinary URL
     cloudinaryPublicId: (file as any).filename, // Cloudinary public ID
     analysisStatus: 'pending',
     uploadedBy: user._id,
@@ -65,7 +65,7 @@ const uploadDocument = async (
   // Log activity
   await ActivityService.logActivity({
     type: 'document_uploaded',
-    message: `Document uploaded: ${document.fileName} to folder ${folderName}`,
+    message: `Document uploaded: ${document.originalName} to folder ${folder}`,
     userId: user._id,
     caseId: caseData._id,
     documentId: document._id as any,
@@ -107,7 +107,7 @@ const getDocumentsByCase = async (
   const filter: any = { caseId: caseData._id };
 
   if (query.folder) {
-    filter.folderName = query.folder;
+    filter.folder = query.folder;
   }
 
   // Get documents
@@ -119,10 +119,10 @@ const getDocumentsByCase = async (
   const groupedDocuments: TGroupedDocuments = {};
 
   documents.forEach((doc) => {
-    if (!groupedDocuments[doc.folderName]) {
-      groupedDocuments[doc.folderName] = [];
+    if (!groupedDocuments[doc.folder]) {
+      groupedDocuments[doc.folder] = [];
     }
-    groupedDocuments[doc.folderName].push(doc);
+    groupedDocuments[doc.folder].push(doc);
   });
 
   return {
@@ -184,7 +184,7 @@ const deleteDocument = async (
   // Log activity
   await ActivityService.logActivity({
     type: 'document_deleted',
-    message: `Document deleted: ${document.fileName}`,
+    message: `Document deleted: ${document.originalName}`,
     userId: user._id,
     caseId: caseData._id,
   });
@@ -199,7 +199,7 @@ const deleteDocument = async (
  * @returns The created document ID
  */
 const initiateDocumentUpload = async (payload: TInitiateDocumentPayload) => {
-  const { caseId, folderName, fileName, fileType, fileSize, uploaderId } =
+  const { caseId, folder, originalName, mimeType, fileSize, uploaderId, description } =
     payload;
 
   // Verify user exists
@@ -228,11 +228,11 @@ const initiateDocumentUpload = async (payload: TInitiateDocumentPayload) => {
   const document = await DocumentModel.create({
     id: documentId,
     caseId: caseData._id,
-    folderName,
-    fileName,
-    fileType,
+    folder,
+    originalName,
+    mimeType,
     fileSize,
-    cloudinaryUrl: '', // Will be updated after upload
+    storagePath: '', // Will be updated after upload
     cloudinaryPublicId: '', // Will be updated after upload
     cloudinaryFileId: '', // Will be updated after upload
     processingStatus: 'pending',
@@ -240,6 +240,7 @@ const initiateDocumentUpload = async (payload: TInitiateDocumentPayload) => {
     uploaderId: user._id,
     uploadedBy: user._id,
     uploadedAt: new Date(),
+    description: description || '',
   });
 
   return {
@@ -290,7 +291,7 @@ const updateCloudinaryDetails = async (
   const document = await DocumentModel.findOneAndUpdate(
     { id: documentId },
     {
-      cloudinaryUrl,
+      storagePath: cloudinaryUrl,
       cloudinaryPublicId,
       cloudinaryFileId,
       processingStatus: 'processing', // Move to processing for AI analysis

@@ -56,25 +56,29 @@ const documentSchema = new Schema<TDocument>(
       ref: 'Case',
       required: true,
     },
-    folderName: {
-      type: String,
-      required: true,
+    folder: {
+        type: String,
+        default: 'Unsorted'
     },
-    fileName: {
-      type: String,
-      required: true,
+    originalName: {
+        type: String,
+        required: true
     },
-    fileType: {
-      type: String,
-      required: true,
+    description: {
+        type: String,
+        default: ''
+    },
+    mimeType: {
+        type: String,
+        required: true
     },
     fileSize: {
       type: Number,
       required: true,
     },
-    cloudinaryUrl: {
-      type: String,
-      required: true,
+    storagePath: {
+        type: String,
+        default: ''
     },
     cloudinaryPublicId: {
       type: String,
@@ -131,7 +135,7 @@ const documentSchema = new Schema<TDocument>(
 
 // Indexes for better query performance
 documentSchema.index({ caseId: 1 });
-documentSchema.index({ folderName: 1 });
+documentSchema.index({ folder: 1 });
 documentSchema.index({ uploadedBy: 1 });
 documentSchema.index({ uploaderId: 1 });
 documentSchema.index({ processingStatus: 1 });
