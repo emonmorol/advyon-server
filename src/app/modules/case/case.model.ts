@@ -44,7 +44,7 @@ const caseSchema = new Schema<TCase>(
     urgency: {
       type: String,
       enum: CaseUrgency,
-      required: true,
+      default: 'medium',
     },
     nextDeadline: {
       type: Date,

@@ -36,9 +36,9 @@ export interface TCase extends Document {
 // Create case payload
 export interface TCreateCasePayload {
   title: string;
-  caseNumber: string;
-  caseType: string;
-  urgency: TCaseUrgency;
+  caseNumber?: string;
+  caseType?: string;
+  urgency?: TCaseUrgency;
   nextDeadline?: Date;
   nextDeadlineDescription?: string;
   folders?: TCaseFolder[];

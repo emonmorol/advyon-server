@@ -11,7 +11,7 @@ export const CaseValidation = {
       title: z.string().min(3, 'Title must be at least 3 characters'),
       caseNumber: z.string().min(1, 'Case number is required'),
       caseType: z.string().min(1, 'Case type is required'),
-      urgency: z.enum(['low', 'medium', 'high']),
+      urgency: z.enum(['low', 'medium', 'high']).default('medium'),
       nextDeadline: z.string().datetime().optional(),
       nextDeadlineDescription: z.string().optional(),
       folders: z.array(caseFolderSchema).optional(),

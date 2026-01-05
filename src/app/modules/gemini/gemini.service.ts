@@ -34,7 +34,7 @@ const DEFAULT_AI_ANALYSIS: TAiAnalysis = {
   documentCategory: 'Other',
   confidenceScore: 0,
   analyzedAt: new Date(),
-  modelVersion: 'gemini-pro',
+  modelVersion: 'gemini-3-flash-preview',
 };
 
 /**
@@ -127,7 +127,7 @@ JSON RESPONSE:`;
           ? parsedResult.confidenceScore
           : 0.5,
       analyzedAt: new Date(),
-      modelVersion: 'gemini-pro',
+      modelVersion: 'gemini-3-flash-preview',
     };
 
     return analysis;
