@@ -87,46 +87,33 @@ const uploadDocument = catchAsync(async (req, res) => {
     description: description || '',
   });
 
-  const documentId = documentInit.documentId;
+    const documentId = documentInit.documentId;
 
-  // Step 2: Upload to Cloudinary (async, but we need the URL)
-  try {
-    let cloudinaryResult;
+    try {
+        console.log('File uploaded via middleware:', file); 
+      // Step 2: Extract Cloudinary details (already uploaded via multer middleware)
+      if (!file.path) {
+         throw new Error('File path (Cloudinary URL) not available');
+      }
 
-    // Check if file is stored on disk (multer diskStorage) or in memory
-    if (file.path) {
-      // File is on disk
-      cloudinaryResult = await uploadFileToCloudinary(file.path, {
-        folder: `advyon/cases/${caseIdParam}/documents`,
-        publicIdPrefix: `doc_${documentId}`,
-        resourceType: 'auto',
-      });
-
-      // Clean up temp file
-      fs.unlink(file.path, (err) => {
-        if (err) console.error('Error deleting temp file:', err);
-      });
-    } else if (file.buffer) {
-      // File is in memory
-      cloudinaryResult = await uploadBufferToCloudinary(file.buffer, {
-        folder: `advyon/cases/${caseIdParam}/documents`,
-        publicIdPrefix: `doc_${documentId}`,
-        resourceType: 'auto',
-      });
-    } else {
-      throw new Error('File data not available');
-    }
-
+    const cloudinaryUrl = file.path;
+    console.log('Using Cloudinary URL:', cloudinaryUrl);
+    // Check if the URL is accessible
+    // For raw files, sometimes the extension is missing or it needs specific handling
+    
+    const cloudinaryPublicId = file.filename;
+    
     // Step 3: Update DB with Cloudinary details (status: 'processing')
     await DocumentServices.updateCloudinaryDetails(
       documentId,
-      cloudinaryResult.secure_url,
-      cloudinaryResult.public_id,
-      cloudinaryResult.asset_id,
+      cloudinaryUrl,
+      cloudinaryPublicId,
+      cloudinaryPublicId, // Using filename as assetId since it's not strictly separate here
     );
 
     // Step 4: Trigger async AI analysis (don't await)
-    processDocumentWithAI(documentId, file).catch((error) => {
+    // We pass the URL so the background process can download it
+    processDocumentWithAI(documentId, cloudinaryUrl, file.mimetype, cloudinaryPublicId).catch((error) => {
       console.error(`AI processing error for document ${documentId}:`, error);
     });
 
@@ -154,14 +141,17 @@ const uploadDocument = catchAsync(async (req, res) => {
       message: 'Document uploaded successfully', // Added message field for consistency
       data: responseData,
     });
+  // No catch block needed here for upload failure because request shouldn't fail after DB init 
+  // if Cloudinary was already handled by middleware. 
+  // But if updateCloudinaryDetails fails, it will go to global error handler.
+  // We can wrap in try-catch if we want to update status on error, but catchAsync handles it.
+  // However, the original code had a try/catch to update status to failed.
   } catch (error) {
-    // Update status to failed if upload fails
-    await DocumentServices.updateProcessingStatus(
+     await DocumentServices.updateProcessingStatus(
       documentId,
       'failed',
-      error instanceof Error ? error.message : 'Upload failed',
+      error instanceof Error ? error.message : 'Upload processing failed',
     );
-
     throw error;
   }
 });
@@ -170,16 +160,94 @@ const uploadDocument = catchAsync(async (req, res) => {
  * Background process for AI analysis
  * This runs asynchronously after the response is sent
  */
+// Import cloudinary to generate signed URLs
+import { cloudinaryUpload } from '../../config/cloudinary.config';
+
+/**
+ * Background process for AI analysis
+ * This runs asynchronously after the response is sent
+ */
 async function processDocumentWithAI(
   documentId: string,
-  file: Express.Multer.File,
+  fileUrl: string,
+  mimeType: string,
+  publicId: string
 ): Promise<void> {
   try {
+    console.log(`Starting AI analysis for document ${documentId}`);
+    
+    // Generate a signed URL for download to bypass potential access restrictions
+    // This handles cases where the raw file might be private/authenticated
+    const resourceType = mimeType.startsWith('image/') ? 'image' : mimeType.startsWith('video/') ? 'video' : 'raw';
+    
+    // We can assume format is part of publicId for raw files usually, but let's just use the publicId
+    // For raw files, we might need to be careful with the extension
+    
+    const signedUrl = cloudinaryUpload.url(publicId, {
+      resource_type: resourceType,
+      type: 'authenticated', // Try authenticated first as it covers private/authenticated
+      sign_url: true,
+      secure: true
+    });
+    
+    // If the original URL was already signed or public, this helps ensuring we have access
+    // But actually, if we just want to download, we can try the original URL first, 
+    // and if 401, try a signed one. 
+    // Or just safer: use the API to get a download link? No, url() is best.
+    
+    // Let's rely on the passed fileUrl first, but catch the 401.
+    // Actually, let's just construct a signed URL using the helper if we have the publicId.
+    
+    // Fallback: If publicId is missing (unlikely), stick to fileUrl.
+    let downloadUrl = fileUrl;
+    
+    if (publicId) {
+        // Construct a delivery URL that is signed. 
+        // Note: 'authenticated' type is needed if the resource is indeed authenticated.
+        // If it was uploaded as 'upload' (public), 'authenticated' might fail or just work?
+        // Let's try to fetch the original URL first.
+    }
+
+    console.log(`Downloading file from: ${downloadUrl}`);
+
+    // Download file content
+    let response = await fetch(downloadUrl);
+    
+    if (response.status === 401 || response.status === 403) {
+        console.log('Download failed with 401/403, attempting to generate signed URL...');
+        // Try generating a signed URL for 'authenticated' type (common for raw files restriction)
+        // Note: This assumes we have the right publicId.
+        const signedUrl = cloudinaryUpload.url(publicId, {
+            resource_type: resourceType,
+            type: 'authenticated',
+            sign_url: true,
+            secure: true
+        });
+        console.log(`Retrying with signed URL: ${signedUrl}`);
+        response = await fetch(signedUrl);
+        
+        // If still fails, try 'private'
+        if (!response.ok) {
+             const privateUrl = cloudinaryUpload.url(publicId, {
+                resource_type: resourceType,
+                type: 'private',
+                sign_url: true,
+                secure: true
+            });
+            console.log(`Retrying with private signed URL: ${privateUrl}`);
+            response = await fetch(privateUrl);
+        }
+    }
+
+    if (!response.ok) {
+        throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const fileBuffer = Buffer.from(arrayBuffer);
     // Extract text from document
-    const fileBuffer = file.buffer || fs.readFileSync(file.path);
     const extractedText = await GeminiService.extractTextFromDocument(
       fileBuffer,
-      file.mimetype,
+      mimeType,
     );
 
     // Analyze with Gemini AI

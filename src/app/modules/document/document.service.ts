@@ -203,13 +203,13 @@ const initiateDocumentUpload = async (payload: TInitiateDocumentPayload) => {
     payload;
 
   // Verify user exists
-  const user = await User.findOne({ id: uploaderId });
+  const user = await User.findById(uploaderId);
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
 
   // Verify case exists and user owns it
-  const caseData = await Case.findOne({ id: caseId });
+  const caseData = await Case.findById(caseId);
   if (!caseData) {
     throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
   }

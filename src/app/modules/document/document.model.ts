@@ -82,7 +82,7 @@ const documentSchema = new Schema<TDocument>(
     },
     cloudinaryPublicId: {
       type: String,
-      required: true,
+      default: '',
     },
     cloudinaryFileId: {
       type: String,
