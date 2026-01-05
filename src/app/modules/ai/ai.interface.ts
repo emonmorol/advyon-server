@@ -7,6 +7,7 @@ export type TChatRequest = {
   caseId: string;
   message: string;
   history: TChatHistory[];
+  documentIds?: string | string[]; // Single ID or array of IDs
 };
 
 export type TSuggestedAction = {

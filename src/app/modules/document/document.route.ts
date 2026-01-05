@@ -15,6 +15,26 @@ const router = express.Router();
 // These are removed to avoid duplication.
 
 /**
+ * GET /documents/:documentId/content
+ * Get document content (viewer)
+ */
+router.get(
+    '/:documentId/content',
+    auth(),
+    DocumentControllers.getDocumentContent
+);
+
+/**
+ * PUT /documents/:documentId/summary
+ * Update document summary
+ */
+router.put(
+    '/:documentId/summary',
+    auth(),
+    DocumentControllers.updateDocumentSummary
+);
+
+/**
  * GET /documents/:caseId/:documentId
  * Get a single document by ID
  * Requires authentication
@@ -50,26 +70,5 @@ router.post(
  */
 router.delete('/:caseId/:documentId', auth(), DocumentControllers.deleteDocument);
 router.get('/:caseId/:documentId/download', auth('admin', 'superAdmin', 'lawyer', 'client'), DocumentControllers.downloadDocument);
-
-
-/**
- * GET /documents/:documentId/content
- * Get document content (viewer)
- */
-router.get(
-    '/:documentId/content',
-    auth(),
-    DocumentControllers.getDocumentContent
-);
-
-/**
- * PUT /documents/:documentId/summary
- * Update document summary
- */
-router.put(
-    '/:documentId/summary',
-    auth(),
-    DocumentControllers.updateDocumentSummary
-);
 
 export const DocumentRoutes = router;

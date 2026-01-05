@@ -22,5 +22,5 @@ export default {
   super_admin_password: process.env.SUPER_ADMIN_PASSWORD,
   clerk_secret_key: process.env.CLERK_SECRET_KEY,
   clerk_publishable_key: process.env.CLERK_PUBLISHABLE_KEY,
-  gemini_api_key: process.env.GEMINI_API_KEY,
+  openrouter_api_key: process.env.OPENROUTER_API_KEY,
 };

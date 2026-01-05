@@ -53,6 +53,8 @@ export interface TDocument extends Document {
   cloudinaryPublicId: string;
   cloudinaryFileId: string; // For secure deletion
   description?: string;
+  summary?: string; // Root-level summary for easy access
+  extractedText?: string; // Full extracted text content
 
   // Processing status (new AI pipeline)
   processingStatus: TDocumentProcessingStatus;

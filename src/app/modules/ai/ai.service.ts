@@ -1,7 +1,8 @@
 import httpStatus from 'http-status';
 import AppError from '../../errors/appError';
 import { DocumentModel } from '../document/document.model';
-import { GeminiService } from '../gemini/gemini.service';
+import { extractTextFromDocument } from '../../utils/document.utils';
+import { OpenRouterService } from './openrouter.service';
 import { DocumentServices } from '../document/document.service';
 import { Buffer } from 'buffer';
 import {
@@ -9,30 +10,44 @@ import {
   TChatResponse,
   TDocumentAnalysisResponse,
 } from './ai.interface';
-import { geminiModel } from '../../config/gemini.config';
 
 const processChat = async (payload: TChatRequest): Promise<TChatResponse> => {
   try {
-    const { message, history } = payload;
+    const { message, history, documentIds } = payload;
     
-    // Construct chat history for Gemini
-    // Note: Gemini API expects history in a specific format if using startChat
-    // For simplicity with generateContent, we'll append history to prompt or use startChat if applicable
-    
-    const chat = geminiModel.startChat({
-        history: history.map(msg => ({
-            role: msg.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: msg.content }]
-        }))
-    });
+    let contextPrompt = '';
 
-    const result = await chat.sendMessage(message);
-    const response = result.response;
-    const text = response.text();
+    // Handle document context if provided
+    if (documentIds) {
+        const ids = Array.isArray(documentIds) ? documentIds : [documentIds];
+        
+        if (ids.length > 0) {
+            // Fetch documents with extractedText included
+            const documents = await DocumentModel.find({ 
+                id: { $in: ids } 
+            }).select('+extractedText');
+
+            if (documents.length > 0) {
+                contextPrompt += '\n\nHere is the content of the referenced documents:\n';
+                documents.forEach((doc, index) => {
+                    const text = doc.extractedText || '';
+                    if (text) {
+                        contextPrompt += `\n--- Document ${index + 1}: ${doc.originalName} ---\n${text.substring(0, 25000)}\n`; // Limit per doc to safe size
+                    } else {
+                        contextPrompt += `\n--- Document ${index + 1}: ${doc.originalName} ---\n[Content available but not extracted. Summary: ${doc.summary || 'N/A'}]\n`;
+                    }
+                });
+                contextPrompt += '\nUse the above document content to answer the user request.\n';
+            }
+        }
+    }
+
+    // Process chat with context
+    const responseText = await OpenRouterService.processChat(message, history, contextPrompt);
 
     return {
-      response: text,
-      suggestedActions: [], // Gemini doesn't inherently suggest actions without specific prompting instructions
+      response: responseText,
+      suggestedActions: [], 
     };
   } catch (error) {
     console.error('Chat processing error:', error);
@@ -65,19 +80,21 @@ const analyzeDocument = async (documentId: string): Promise<TDocumentAnalysisRes
     const mimeType = document.mimeType || 'text/plain'; // Use stored mimeType or fallback
 
     // Extract text
-    const text = await GeminiService.extractTextFromDocument(buffer, mimeType);
+    const text = await extractTextFromDocument(buffer, mimeType);
     
-    // Analyze with Gemini
-    const analysis = await GeminiService.analyzeLegalDocument(text);
+    // Analyze with OpenRouter
+    const analysis = await OpenRouterService.analyzeLegalDocument(text);
 
     // Update document with analysis results
     document.aiAnalysis = analysis;
+    document.extractedText = text;
+    document.summary = analysis.summary.refined;
     document.processingStatus = 'completed';
     document.analysisStatus = 'analyzed'; // Legacy field support, corrected enum value
     await document.save();
 
     return {
-        summary: analysis.summary, // Now passing the full object directly
+        summary: analysis.summary, 
         entities: analysis.extractedEntities.map(entity => ({
             type: 'organization', // Default mapping
             name: entity,

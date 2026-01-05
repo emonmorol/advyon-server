@@ -3,7 +3,8 @@ import fs from 'fs';
 import mongoose from 'mongoose';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
-import { GeminiService } from '../gemini/gemini.service';
+import { OpenRouterService } from '../ai/openrouter.service';
+import { extractTextFromDocument } from '../../utils/document.utils';
 import {
   uploadBufferToCloudinary,
   uploadFileToCloudinary,
@@ -183,38 +184,16 @@ async function processDocumentWithAI(
     // We can assume format is part of publicId for raw files usually, but let's just use the publicId
     // For raw files, we might need to be careful with the extension
     
-    const signedUrl = cloudinaryUpload.url(publicId, {
-      resource_type: resourceType,
-      type: 'authenticated', // Try authenticated first as it covers private/authenticated
-      sign_url: true,
-      secure: true
-    });
-    
-    // If the original URL was already signed or public, this helps ensuring we have access
-    // But actually, if we just want to download, we can try the original URL first, 
-    // and if 401, try a signed one. 
-    // Or just safer: use the API to get a download link? No, url() is best.
-    
-    // Let's rely on the passed fileUrl first, but catch the 401.
-    // Actually, let's just construct a signed URL using the helper if we have the publicId.
-    
     // Fallback: If publicId is missing (unlikely), stick to fileUrl.
     let downloadUrl = fileUrl;
     
-    if (publicId) {
-        // Construct a delivery URL that is signed. 
-        // Note: 'authenticated' type is needed if the resource is indeed authenticated.
-        // If it was uploaded as 'upload' (public), 'authenticated' might fail or just work?
-        // Let's try to fetch the original URL first.
-    }
-
     console.log(`Downloading file from: ${downloadUrl}`);
 
     // Download file content
     let response = await fetch(downloadUrl);
     
     if (response.status === 401 || response.status === 403) {
-        console.log('Download failed with 401/403, attempting to generate signed URL...');
+        console.log('Download failed with 401/403, attempting to generte signed URL...');
         // Try generating a signed URL for 'authenticated' type (common for raw files restriction)
         // Note: This assumes we have the right publicId.
         const signedUrl = cloudinaryUpload.url(publicId, {
@@ -244,21 +223,24 @@ async function processDocumentWithAI(
     }
     const arrayBuffer = await response.arrayBuffer();
     const fileBuffer = Buffer.from(arrayBuffer);
-    // Extract text from document
-    const extractedText = await GeminiService.extractTextFromDocument(
+    
+    // Extract text from document using the new utility
+    const extractedText = await extractTextFromDocument(
       fileBuffer,
       mimeType,
     );
 
-    // Analyze with Gemini AI
-    const aiAnalysis = await GeminiService.analyzeLegalDocument(extractedText);
+    // Analyze with OpenRouterService instead of GeminiService
+    const aiAnalysis = await OpenRouterService.analyzeLegalDocument(extractedText);
 
     // Update document with AI analysis results
     await DocumentModel.findOneAndUpdate(
       { id: documentId },
       {
         processingStatus: 'completed',
-        aiAnalysis,
+        aiAnalysis: aiAnalysis,
+        extractedText: extractedText,
+        summary: aiAnalysis.summary.refined,
         analysisStatus: 'analyzed', // Legacy field
       },
     );

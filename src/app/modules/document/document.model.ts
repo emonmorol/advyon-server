@@ -88,6 +88,10 @@ const documentSchema = new Schema<TDocument>(
       type: String,
       default: '',
     },
+    extractedText: {
+      type: String,
+      select: false, // Don't return by default
+    },
 
     // Processing status for AI pipeline
     processingStatus: {

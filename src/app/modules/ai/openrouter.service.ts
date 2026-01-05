@@ -1,11 +1,7 @@
-/* eslint-disable @typescript-eslint/no-var-requires, no-undef */
-import { Buffer } from 'buffer';
-import mammoth from 'mammoth';
-import { geminiModel } from '../../config/gemini.config';
+import httpStatus from 'http-status';
+import { openRouterConfig, OPENROUTER_MODEL } from '../../config/openrouter.config';
 import { TAiAnalysis, TDocumentCategory } from '../document/document.interface';
-
-// pdf-parse doesn't have proper ES module exports, use require
-const pdfParse = require('pdf-parse');
+import { TChatHistory } from './ai.interface';
 
 // Valid document categories
 const VALID_CATEGORIES: TDocumentCategory[] = [
@@ -34,11 +30,37 @@ const DEFAULT_AI_ANALYSIS: TAiAnalysis = {
   documentCategory: 'Other',
   confidenceScore: 0,
   analyzedAt: new Date(),
-  modelVersion: 'gemini-3-flash-preview',
+  modelVersion: OPENROUTER_MODEL,
+};
+
+// Singleton instance holder
+let openRouterClient: any = null;
+
+/**
+ * Dynamically import and initialize the OpenRouter client
+ * This is needed because @openrouter/sdk is an ES Module and we are in a CommonJS environment
+ */
+const getOpenRouterClient = async () => {
+  if (openRouterClient) return openRouterClient;
+
+  try {
+    // Dynamic import - using eval to bypass TypeScript compiling to require()
+    // This is necessary because the project is CJS but the SDK is ESM-only
+    const { OpenRouter } = await (eval('import("@openrouter/sdk")') as Promise<any>);
+    
+    openRouterClient = new OpenRouter({
+      apiKey: openRouterConfig.apiKey,
+    });
+
+    return openRouterClient;
+  } catch (error) {
+    console.error('Failed to initialize OpenRouter client:', error);
+    throw new Error('AI Service Unavailable: Failed to load OpenRouter SDK');
+  }
 };
 
 /**
- * Analyze a legal document using Google Gemini AI
+ * Analyze a legal document using OpenRouter (OpenAI-compatible)
  * @param fileText - The extracted text content from the document
  * @returns AI analysis results with summary, entities, category, and confidence
  */
@@ -54,7 +76,7 @@ const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
     };
   }
 
-  // Truncate very long documents to avoid token limits
+  // Truncate very long documents to avoid token limits (OpenRouter models vary in detailed limit, but 30k chars is safe for most)
   const truncatedText =
     fileText.length > 30000 ? fileText.substring(0, 30000) + '...' : fileText;
 
@@ -82,9 +104,26 @@ ${truncatedText}
 JSON RESPONSE:`;
 
   try {
-    const result = await geminiModel.generateContent(prompt);
-    const response = result.response;
-    const responseText = response.text();
+    const client = await getOpenRouterClient();
+    
+    const completion = await client.chat.send({
+      model: OPENROUTER_MODEL,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      stream: false,
+    }); // Currently using send which might return a non-promise or completion directly depending on SDK
+    
+    // Note: The @openrouter/sdk chat.send return type might be different or promise-based. 
+    // Usually it returns a promise resolving to the completion object.
+    
+    // If specific casting is needed due to beta SDK:
+    const response = completion as any; 
+    
+    const responseText = response.choices?.[0]?.message?.content || '';
 
     // Bulletproof JSON cleaning - remove all markdown formatting
     let cleanedResponse = responseText
@@ -110,7 +149,7 @@ JSON RESPONSE:`;
     const analysis: TAiAnalysis = {
       summary: {
         refined: summaryText,
-        raw: summaryText, // Use same text for raw unless we want to distinguish later
+        raw: summaryText, 
       },
       extractedEntities: Array.isArray(parsedResult.extractedEntities)
         ? parsedResult.extractedEntities
@@ -127,13 +166,13 @@ JSON RESPONSE:`;
           ? parsedResult.confidenceScore
           : 0.5,
       analyzedAt: new Date(),
-      modelVersion: 'gemini-3-flash-preview',
+      modelVersion: OPENROUTER_MODEL,
     };
 
     return analysis;
   } catch (error) {
     // Log the error for debugging
-    console.error('Gemini AI analysis error:', error);
+    console.error('OpenRouter AI analysis error:', error);
 
     // Return fallback object instead of throwing
     return {
@@ -149,82 +188,57 @@ JSON RESPONSE:`;
 };
 
 /**
- * Extract text from various document formats
- * Supports: PDF, DOCX, DOC, and plain text files
- * @param buffer - File buffer
- * @param mimeType - MIME type of the file
- * @returns Extracted text content
+ * Process chat message using OpenRouter
  */
-const extractTextFromDocument = async (
-  buffer: Buffer,
-  mimeType: string,
-): Promise<string> => {
-  try {
-    // Plain text files
-    if (mimeType.includes('text') || mimeType.includes('plain')) {
-      return buffer.toString('utf-8');
+const processChat = async (message: string, history: TChatHistory[], context?: string): Promise<string> => {
+    try {
+        const messages: any[] = [];
+        
+        // Add system/context message
+        if (context) {
+            messages.push({
+                role: 'system',
+                content: context
+            });
+        } else {
+             messages.push({
+                role: 'system',
+                content: 'You are a helpful legal assistant.'
+            });
+        }
+
+        // Add history
+        history.forEach(msg => {
+            messages.push({
+                role: msg.role,
+                content: msg.content
+            });
+        });
+
+        // Add current message
+        messages.push({
+            role: 'user',
+            content: message
+        });
+
+        const client = await getOpenRouterClient();
+
+        const completion = await client.chat.send({
+            model: OPENROUTER_MODEL,
+            messages: messages,
+            stream: false
+        });
+
+        const response = completion as any;
+        return response.choices?.[0]?.message?.content || 'No response generated.';
+
+    } catch (error) {
+        console.error('OpenRouter Chat error:', error);
+        throw new Error('Failed to process chat message');
     }
+}
 
-    // PDF extraction using pdf-parse
-    if (mimeType.includes('pdf') || mimeType === 'application/pdf') {
-      try {
-        const pdfData = await pdfParse(buffer);
-        return pdfData.text || '';
-      } catch (pdfError) {
-        console.error('PDF extraction error:', pdfError);
-        return '';
-      }
-    }
-
-    // DOCX extraction using mammoth
-    if (
-      mimeType.includes('wordprocessingml') ||
-      mimeType ===
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      mimeType.includes('docx')
-    ) {
-      try {
-        const result = await mammoth.extractRawText({ buffer });
-        return result.value || '';
-      } catch (docxError) {
-        console.error('DOCX extraction error:', docxError);
-        return '';
-      }
-    }
-
-    // Legacy DOC format (mammoth has limited support)
-    if (mimeType === 'application/msword' || mimeType.includes('msword')) {
-      try {
-        const result = await mammoth.extractRawText({ buffer });
-        return result.value || '';
-      } catch (docError) {
-        console.error('DOC extraction error:', docError);
-        return '';
-      }
-    }
-
-    // RTF files - try mammoth as fallback
-    if (mimeType.includes('rtf')) {
-      try {
-        const result = await mammoth.extractRawText({ buffer });
-        return result.value || '';
-      } catch (rtfError) {
-        console.error('RTF extraction error:', rtfError);
-        return '';
-      }
-    }
-
-    // Unsupported format - return empty string (don't crash)
-    console.warn(`Unsupported document format for text extraction: ${mimeType}`);
-    return '';
-  } catch (error) {
-    // Catch-all error handler - never crash, just log and return empty
-    console.error('Text extraction failed:', error);
-    return '';
-  }
-};
-
-export const GeminiService = {
+export const OpenRouterService = {
   analyzeLegalDocument,
-  extractTextFromDocument,
+  processChat
 };

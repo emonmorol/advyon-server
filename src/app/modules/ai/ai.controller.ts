@@ -4,7 +4,16 @@ import sendResponse from '../../utils/sendResponse';
 import { AIServices } from './ai.service';
 
 const chat = catchAsync(async (req, res) => {
-  const result = await AIServices.processChat(req.body);
+  console.log('Incoming Chat Request Body:', JSON.stringify(req.body, null, 2));
+
+  // Normalize payload: support 'documentId' (singular) by mapping to 'documentIds'
+  const payload = { ...req.body };
+  if (payload.documentId && !payload.documentIds) {
+    console.log(`Mapping legacy 'documentId' (${payload.documentId}) to 'documentIds'`);
+    payload.documentIds = [payload.documentId];
+  }
+
+  const result = await AIServices.processChat(payload);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
