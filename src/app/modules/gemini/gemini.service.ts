@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 import mammoth from 'mammoth';
-import { geminiModel } from '../../config/gemini.config';
+import { groqClient, AI_MODEL } from '../../config/groq.config';
 import { TAiAnalysis, TDocumentCategory } from '../document/document.interface';
 
 // pdf-parse doesn't have proper ES module exports, use require
@@ -33,13 +33,11 @@ const DEFAULT_AI_ANALYSIS: TAiAnalysis = {
   documentCategory: 'Other',
   confidenceScore: 0,
   analyzedAt: new Date(),
-  modelVersion: 'gemini-1.5-flash',
+  modelVersion: AI_MODEL,
 };
 
 /**
- * Analyze a legal document using Google Gemini AI
- * @param fileText - The extracted text content from the document
- * @returns AI analysis results with summary, entities, category, and confidence
+ * Analyze a legal document using Groq (Llama 3)
  */
 const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
   // Handle empty or very short text
@@ -50,94 +48,61 @@ const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
     };
   }
 
-  // Truncate very long documents to avoid token limits (Gemini Pro has 32k context, safe to increase)
+  // Truncate very long documents
   const truncatedText =
-    fileText.length > 30000 ? fileText.substring(0, 30000) + '...' : fileText;
+    fileText.length > 25000 ? fileText.substring(0, 25000) + '...' : fileText;
 
-  const prompt = `You are an expert legal aide. Analyze this legal document and provide structured insights.
+  const systemPrompt = `You are an expert legal aide. Analyze the provided legal document text and output structured JSON.
   
   RETURN ONLY JSON. No markdown formatting. No \`\`\`json blocks.
   
-  Format:
+  Output Schema:
   {
-    "summary": "A refined, professional executive summary (2-3 paragraphs).",
-    "rawSummary": "A longer, detailed explanation of the document contents in markdown format.",
-    "keyPoints": ["Key point 1", "Key point 2", "Key point 3"],
-    "extractedEntities": [
-      {
-        "name": "Entity Name",
-        "type": "person" | "organization" | "date" | "amount" | "location" | "other",
-        "count": 1,
-        "mentions": ["context sentence 1"]
-      }
-    ],
-    "legalRefs": [
-      {
-        "citation": "Section/Law Name",
-        "description": "Brief explanation",
-        "relevance": "high" | "medium" | "low"
-      }
-    ],
-    "documentCategory": "Contract" | "Affidavit" | ... (one of valid categories),
+    "summary": "Professional executive summary (2-3 paragraphs)",
+    "rawSummary": "Detailed markdown explanation of contents",
+    "keyPoints": ["point 1", "point 2", ...],
+    "extractedEntities": [{ "name": "Entity Name", "type": "person/organization/date/etc", "count": 1, "mentions": [] }],
+    "legalRefs": [{ "citation": "Law Name", "description": "desc", "relevance": "high/medium/low" }],
+    "documentCategory": "One of: ${VALID_CATEGORIES.join(', ')}",
     "confidenceScore": 0.95
-  }
-  
-  Valid Categories: ${VALID_CATEGORIES.join(', ')}
-  
-  DOCUMENT TEXT:
-  ${truncatedText}`;
+  }`;
 
   try {
-    const result = await geminiModel.generateContent(prompt);
-    const response = result.response;
-    const responseText = response.text();
+    const completion = await groqClient.chat.completions.create({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `DOCUMENT TEXT:\n${truncatedText}` },
+      ],
+      model: AI_MODEL,
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+    });
 
-    console.log('[Gemini] Raw Response:', responseText.substring(0, 200) + '...');
+    const responseText = completion.choices[0]?.message?.content || '{}';
+    console.log('[Groq] Raw Response:', responseText.substring(0, 200) + '...');
 
-    // Bulletproof JSON cleaning
-    let cleanedResponse = responseText
-      .replace(/```json\n?/gi, '')
-      .replace(/```\n?/gi, '')
-      .replace(/^\s*json\s*/i, '')
-      .trim();
+    const parsedResult = JSON.parse(responseText);
 
-    // Try to extract JSON object if there's extra text around it
-    const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      cleanedResponse = jsonMatch[0];
-    }
-
-    // Parse the JSON response
-    const parsedResult = JSON.parse(cleanedResponse);
-
-    // Validate and sanitize the response
+    // Validate and sanitize
     const analysis: TAiAnalysis = {
       summary: parsedResult.summary || DEFAULT_AI_ANALYSIS.summary,
       rawSummary: parsedResult.rawSummary || '',
       keyPoints: Array.isArray(parsedResult.keyPoints) ? parsedResult.keyPoints : [],
       extractedEntities: Array.isArray(parsedResult.extractedEntities)
-        ? parsedResult.extractedEntities.map((e: any) => ({
-            name: e.name || 'Unknown',
-            type: e.type || 'other',
-            count: e.count || 1,
-            mentions: Array.isArray(e.mentions) ? e.mentions : [],
-          }))
+        ? parsedResult.extractedEntities
         : [],
       legalRefs: Array.isArray(parsedResult.legalRefs) ? parsedResult.legalRefs : [],
       documentCategory: VALID_CATEGORIES.includes(parsedResult.documentCategory)
         ? parsedResult.documentCategory
         : 'Other',
-      confidenceScore:
-        typeof parsedResult.confidenceScore === 'number'
-          ? parsedResult.confidenceScore
-          : 0.5,
+      confidenceScore: parsedResult.confidenceScore || 0.5,
       analyzedAt: new Date(),
-      modelVersion: 'gemini-1.5-flash', // Updated to likely model
+      modelVersion: AI_MODEL,
     };
 
     return analysis;
   } catch (error) {
-    console.error('Gemini AI analysis error:', error);
+    console.error('Groq AI analysis error:', error);
     return {
       ...DEFAULT_AI_ANALYSIS,
       summary: 'AI analysis encountered an error. Please try again.',
@@ -146,23 +111,47 @@ const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
 };
 
 /**
+ * Chat with AI about a document
+ */
+const chatWithAI = async (message: string, context: string, history: any[] = []): Promise<string> => {
+  try {
+    const systemPrompt = `You are an expert legal assistant named Advyon AI.
+    ${context ? `CONTEXT (Use this to answer): \n${context}` : ''}
+    
+    Answer the user's question clearly and professionally. Cite the context where possible.`;
+
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        ...history.map((msg: any) => ({ 
+            role: msg.role === 'user' ? 'user' : 'assistant', 
+            content: msg.content 
+        })),
+        { role: 'user', content: message }
+    ];
+
+    const completion = await groqClient.chat.completions.create({
+      messages: messages as any,
+      model: AI_MODEL,
+    });
+
+    return completion.choices[0]?.message?.content || "I couldn't generate a response.";
+  } catch (error) {
+    console.error('Groq chat error:', error);
+    return "I'm having trouble processing your request right now. Please try again.";
+  }
+};
+
+/**
  * Extract text from various document formats
- * Supports: PDF, DOCX, DOC, and plain text files
- * @param buffer - File buffer
- * @param mimeType - MIME type of the file
- * @returns Extracted text content
  */
 const extractTextFromDocument = async (
   buffer: Buffer,
   mimeType: string,
 ): Promise<string> => {
   try {
-    // Plain text files
     if (mimeType.includes('text') || mimeType.includes('plain')) {
       return buffer.toString('utf-8');
     }
-
-    // PDF extraction using pdf-parse
     if (mimeType.includes('pdf') || mimeType === 'application/pdf') {
       try {
         const pdfData = await pdfParse(buffer);
@@ -172,74 +161,23 @@ const extractTextFromDocument = async (
         return '';
       }
     }
-
-    // DOCX extraction using mammoth
     if (
-      mimeType.includes('wordprocessingml') ||
-      mimeType ===
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      mimeType.includes('docx')
-    ) {
-      try {
-        const result = await mammoth.extractRawText({ buffer });
-        return result.value || '';
-      } catch (docxError) {
-        console.error('DOCX extraction error:', docxError);
-        return '';
+        mimeType.includes('wordprocessingml') ||
+        mimeType.includes('docx') ||
+        mimeType.includes('msword')
+      ) {
+        try {
+          const result = await mammoth.extractRawText({ buffer });
+          return result.value || '';
+        } catch (docError) {
+          console.error('DOCX extraction error:', docError);
+          return '';
+        }
       }
-    }
-
-    // Legacy DOC format (mammoth has limited support)
-    if (mimeType === 'application/msword' || mimeType.includes('msword')) {
-      try {
-        const result = await mammoth.extractRawText({ buffer });
-        return result.value || '';
-      } catch (docError) {
-        console.error('DOC extraction error:', docError);
-        return '';
-      }
-    }
-
-    // RTF files - try mammoth as fallback
-    if (mimeType.includes('rtf')) {
-      try {
-        const result = await mammoth.extractRawText({ buffer });
-        return result.value || '';
-      } catch (rtfError) {
-        console.error('RTF extraction error:', rtfError);
-        return '';
-      }
-    }
-
-    // Unsupported format - return empty string (don't crash)
-    console.warn(`Unsupported document format for text extraction: ${mimeType}`);
     return '';
   } catch (error) {
-    // Catch-all error handler - never crash, just log and return empty
     console.error('Text extraction failed:', error);
     return '';
-  }
-};
-
-const chatWithAI = async (message: string, context: string, history: any[] = []): Promise<string> => {
-  try {
-    // Construct history for Gemini Pro (multi-turn chat)
-    // Simplified for now - can use startChat() from SDK if needed stateful
-    
-    const prompt = `
-    SYSTEM: You are an expert legal assistant named Advyon AI.
-    ${context ? `CONTEXT: Use the following document information to answer the user's question:\n${context}` : ''}
-    
-    USER: ${message}
-    
-    AI:`;
-
-    const result = await geminiModel.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
-  } catch (error) {
-    console.error('Gemini chat error:', error);
-    return "I'm having trouble processing your request right now. Please try again.";
   }
 };
 

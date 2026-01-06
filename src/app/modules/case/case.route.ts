@@ -35,6 +35,16 @@ router.post(
 );
 
 /**
+ * GET /cases/:caseId/documents/:documentId/status
+ * Check document processing status
+ */
+router.get(
+  '/:caseId/documents/:documentId/status',
+  auth(),
+  DocumentControllers.getDocumentStatus,
+);
+
+/**
  * GET /cases
  * Get all cases with optional filters
  * Requires authentication
