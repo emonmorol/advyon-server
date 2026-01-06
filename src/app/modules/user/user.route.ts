@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import express from 'express';
+import auth from '../../middlewares/auth';
 import validateRequest from '../../middlewares/validateRequest';
 import { UserControllers } from './user.controller';
 import { UserValidation } from './user.validation';
@@ -10,6 +11,12 @@ router.post(
   '/create-user',
   validateRequest(UserValidation.createUserValidationSchema),
   UserControllers.createUser,
+);
+
+router.get(
+  '/me/profile',
+  auth(),
+  UserControllers.getMyProfile,
 );
 
 router.get(

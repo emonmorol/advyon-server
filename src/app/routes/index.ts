@@ -10,6 +10,7 @@ import { NotificationRoutes } from '../modules/notification/notification.route';
 import { CaseAccessRoutes } from '../modules/caseAccess/caseAccess.route';
 import { MetadataRoutes } from '../modules/metadata/metadata.route';
 import { AdminRoutes } from '../modules/admin/admin.route';
+import { DashboardRoutes } from '../modules/dashboard/dashboard.route';
 
 const router = Router();
 
@@ -53,6 +54,10 @@ const moduleRoutes = [
   {
     path: '/admin',
     route: AdminRoutes,
+  },
+  {
+    path: '/dashboard',
+    route: DashboardRoutes,
   },
 ];
 
