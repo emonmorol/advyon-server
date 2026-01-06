@@ -176,12 +176,14 @@ async function processDocumentWithAI(
     const aiAnalysis = await GeminiService.analyzeLegalDocument(extractedText);
 
     // Update document with AI analysis results
+    // Also update the folder name based on the category
     await DocumentModel.findOneAndUpdate(
       { id: documentId },
       {
         processingStatus: 'completed',
         aiAnalysis,
         analysisStatus: 'analyzed', // Legacy field
+        folderName: aiAnalysis.documentCategory || 'General', // Auto-categorize to folder
       },
     );
 

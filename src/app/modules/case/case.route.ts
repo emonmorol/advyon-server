@@ -3,6 +3,9 @@ import auth from '../../middlewares/auth';
 import validateRequest from '../../middlewares/validateRequest';
 import { CaseControllers } from './case.controller';
 import { CaseValidation } from './case.validation';
+import { DocumentControllers } from '../document/document.controller';
+import { DocumentValidation } from '../document/document.validation';
+import { uploadDocument } from '../../config/document-upload.config';
 
 const router = express.Router();
 
@@ -16,6 +19,19 @@ router.post(
   auth(),
   validateRequest(CaseValidation.createCaseValidation),
   CaseControllers.createCase,
+);
+
+/**
+ * POST /cases/:caseId/documents
+ * Upload a document to a specific case
+ * Requires authentication and file upload
+ */
+router.post(
+  '/:caseId/documents',
+  auth(),
+  uploadDocument.single('file'),
+  validateRequest(DocumentValidation.uploadDocumentValidation),
+  DocumentControllers.uploadDocument,
 );
 
 /**
