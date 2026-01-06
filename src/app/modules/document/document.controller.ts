@@ -283,6 +283,34 @@ const getDocument = catchAsync(async (req, res) => {
 });
 
 /**
+ * Get single document by ID (direct access)
+ * GET /documents/id/:documentId
+ */
+const getDocumentById = catchAsync(async (req, res) => {
+  const { documentId } = req.params;
+
+  const document = await DocumentModel.findOne({ id: documentId })
+    .populate('uploadedBy', 'id fullName email')
+    .populate('caseId', 'id caseNumber title');
+
+  if (!document) {
+    return sendResponse(res, {
+      statusCode: httpStatus.NOT_FOUND,
+      success: false,
+      message: 'Document not found',
+      data: null,
+    });
+  }
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Document retrieved successfully',
+    data: document,
+  });
+});
+
+/**
  * Get document processing status (for polling)
  * GET /cases/:caseId/documents/:documentId/status
  */
@@ -402,6 +430,7 @@ export const DocumentControllers = {
   uploadDocumentLegacy,
   getDocuments,
   getDocument,
+  getDocumentById,
   getDocumentStatus,
   deleteDocument,
   reanalyzeDocument,

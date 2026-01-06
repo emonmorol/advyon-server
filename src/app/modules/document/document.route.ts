@@ -45,6 +45,13 @@ router.get(
 );
 
 /**
+ * GET /documents/id/:documentId
+ * Get a single document by ID (direct access)
+ * Requires authentication
+ */
+router.get('/id/:documentId', auth(), DocumentControllers.getDocumentById);
+
+/**
  * GET /documents/:caseId/:documentId
  * Get a single document by ID
  * Requires authentication

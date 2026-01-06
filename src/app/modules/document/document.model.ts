@@ -9,31 +9,28 @@ import {
 // Sub-schema for AI Analysis results
 const aiAnalysisSchema = new Schema<TAiAnalysis>(
   {
-    summary: {
-      type: String,
-      default: '',
-    },
+    summary: { type: String, default: '' },
+    rawSummary: { type: String, default: '' },
+    keyPoints: { type: [String], default: [] },
     extractedEntities: {
-      type: [String],
+      type: Schema.Types.Mixed, // Can be string[] or object[]
       default: [],
     },
+    legalRefs: [
+      {
+        citation: { type: String },
+        description: { type: String },
+        relevance: { type: String, enum: ['high', 'medium', 'low'] },
+      },
+    ],
     documentCategory: {
       type: String,
       enum: [...DocumentCategory, null],
       default: null,
     },
-    confidenceScore: {
-      type: Number,
-      default: 0,
-      min: 0,
-      max: 1,
-    },
-    analyzedAt: {
-      type: Date,
-    },
-    modelVersion: {
-      type: String,
-    },
+    confidenceScore: { type: Number, default: 0, min: 0, max: 1 },
+    analyzedAt: { type: Date },
+    modelVersion: { type: String },
   },
   { _id: false },
 );

@@ -29,14 +29,26 @@ export type TDocumentCategory =
   | 'Other';
 
 // AI Analysis results structure
-export interface TAiAnalysis {
-  summary: string; // AI-generated document summary
-  extractedEntities: string[]; // Names, Dates, Locations found
-  documentCategory: TDocumentCategory | null; // Auto-detected category
+export type TAiAnalysis = {
+  summary: string; // refined summary
+  rawSummary?: string; // markdown formatted raw summary
+  keyPoints?: string[];
+  extractedEntities: string[] | Array<{
+    name: string;
+    type: 'person' | 'organization' | 'date' | 'amount' | 'location' | 'other';
+    count: number;
+    mentions?: string[];
+  }>;
+  legalRefs?: Array<{
+    citation: string;
+    description: string;
+    relevance: 'high' | 'medium' | 'low';
+  }>;
+  documentCategory: TDocumentCategory | null;
   confidenceScore: number; // AI confidence (0-1)
-  analyzedAt?: Date; // When the analysis was performed
-  modelVersion?: string; // AI model version used for analysis
-}
+  analyzedAt: Date; // When the analysis was performed
+  modelVersion: string; // AI model version used for analysis
+};
 
 // Main document interface
 export interface TDocument extends Document {
