@@ -29,7 +29,7 @@ import AppError from '../../errors/appError';
 const uploadDocument = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { caseId: caseIdParam } = req.params;
-  const { folderName } = req.body;
+  const { folderName, folder } = req.body;
   const file = req.file;
 
   // Validate caseId
@@ -65,11 +65,26 @@ const uploadDocument = catchAsync(async (req, res) => {
   }
 
   // Resolve user ID: might be ObjectId or custom ID (e.g., CLI-0002)
+  // Resolve user ID
+  // req.user.userId comes from auth middleware. 
+  // If it's a valid MongoID, we should try findById first.
   let resolvedUploaderId: string = userId;
   const isUserValidObjectId = mongoose.Types.ObjectId.isValid(userId);
 
-  if (!isUserValidObjectId) {
-    // It's a custom ID (e.g., CLI-0002). Find the real _id.
+  if (isUserValidObjectId) {
+    const uploaderUser = await User.findById(userId);
+    if (!uploaderUser) {
+        // Fallback: It might be a valid ObjectID string but stored in 'id' field (unlikely but possible)
+        const userByCustomId = await User.findOne({ id: userId });
+        if (!userByCustomId) {
+             throw new AppError(httpStatus.NOT_FOUND, `Uploader user not found: ${userId}`);
+        }
+        resolvedUploaderId = userByCustomId._id.toString();
+    } else {
+        resolvedUploaderId = uploaderUser._id.toString();
+    }
+  } else {
+    // It's a custom ID (e.g., CLI-0002).
     const uploaderUser = await User.findOne({ id: userId });
     if (!uploaderUser) {
       throw new AppError(httpStatus.NOT_FOUND, `Uploader user not found: ${userId}`);
@@ -79,7 +94,7 @@ const uploadDocument = catchAsync(async (req, res) => {
 
   const documentInit = await DocumentServices.initiateDocumentUpload({
     caseId: resolvedCaseId,
-    folderName: folderName || 'General',
+    folderName: folderName || folder || 'General',
     fileName: file.originalname,
     fileType: file.mimetype,
     fileSize: file.size,
@@ -101,10 +116,12 @@ const uploadDocument = catchAsync(async (req, res) => {
         resourceType: 'auto',
       });
 
-      // Clean up temp file
-      fs.unlink(file.path, (err) => {
-        if (err) console.error('Error deleting temp file:', err);
-      });
+      // Clean up temp file only if it's a local file
+      if (!file.path.startsWith('http')) {
+        fs.unlink(file.path, (err) => {
+          if (err) console.error('Error deleting temp file:', err);
+        });
+      }
     } else if (file.buffer) {
       // File is in memory
       cloudinaryResult = await uploadBufferToCloudinary(file.buffer, {
@@ -166,7 +183,24 @@ async function processDocumentWithAI(
 ): Promise<void> {
   try {
     // Extract text from document
-    const fileBuffer = file.buffer || fs.readFileSync(file.path);
+    let fileBuffer = file.buffer;
+    
+    if (!fileBuffer && file.path) {
+        if (file.path.startsWith('http')) {
+            // It's a Cloudinary URL, download it
+            const axios = await import('axios');
+            const response = await axios.default.get(file.path, { responseType: 'arraybuffer' });
+            fileBuffer = Buffer.from(response.data);
+        } else {
+             // It's a local file path
+             fileBuffer = fs.readFileSync(file.path);
+        }
+    }
+
+    if (!fileBuffer) {
+        throw new Error('File content not available for analysis');
+    }
+
     const extractedText = await GeminiService.extractTextFromDocument(
       fileBuffer,
       file.mimetype,

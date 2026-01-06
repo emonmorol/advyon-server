@@ -102,6 +102,7 @@ export interface TInitiateDocumentPayload {
 // Query parameters for filtering documents
 export interface TDocumentQuery {
   folder?: string;
+  documentId?: string;
   processingStatus?: TDocumentProcessingStatus;
 }
 

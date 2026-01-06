@@ -65,11 +65,11 @@ const documentSchema = new Schema<TDocument>(
     },
     cloudinaryUrl: {
       type: String,
-      required: true,
+      default: '',
     },
     cloudinaryPublicId: {
       type: String,
-      required: true,
+      default: '',
     },
     cloudinaryFileId: {
       type: String,

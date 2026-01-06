@@ -3,6 +3,7 @@ import httpStatus from 'http-status';
 import AppError from '../../errors/appError';
 import { User } from '../user/user.model';
 import { Case } from '../case/case.model';
+import mongoose from 'mongoose';
 import { DocumentModel } from './document.model';
 import {
   TDocumentQuery,
@@ -29,7 +30,15 @@ const uploadDocument = async (
   }
   
   // Verify case exists and user owns it
-  const caseData = await Case.findOne({ id: caseId });
+  let caseData;
+  if (mongoose.Types.ObjectId.isValid(caseId)) {
+    caseData = await Case.findById(caseId);
+  }
+  
+  if (!caseData) {
+    caseData = await Case.findOne({ id: caseId });
+  }
+
   if (!caseData) {
     throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
   }
@@ -203,13 +212,29 @@ const initiateDocumentUpload = async (payload: TInitiateDocumentPayload) => {
     payload;
 
   // Verify user exists
-  const user = await User.findOne({ id: uploaderId });
+  let user;
+  if (mongoose.Types.ObjectId.isValid(uploaderId)) {
+      user = await User.findById(uploaderId);
+  }
+  
+  if (!user) {
+      user = await User.findOne({ id: uploaderId });
+  }
+
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
 
   // Verify case exists and user owns it
-  const caseData = await Case.findOne({ id: caseId });
+  let caseData;
+  if (mongoose.Types.ObjectId.isValid(caseId)) {
+    caseData = await Case.findById(caseId);
+  }
+  
+  if (!caseData) {
+    caseData = await Case.findOne({ id: caseId });
+  }
+
   if (!caseData) {
     throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
   }

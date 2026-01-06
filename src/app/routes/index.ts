@@ -11,6 +11,7 @@ import { CaseAccessRoutes } from '../modules/caseAccess/caseAccess.route';
 import { MetadataRoutes } from '../modules/metadata/metadata.route';
 import { AdminRoutes } from '../modules/admin/admin.route';
 import { DashboardRoutes } from '../modules/dashboard/dashboard.route';
+import { AIRoutes } from '../modules/ai/ai.route';
 
 const router = Router();
 
@@ -58,6 +59,10 @@ const moduleRoutes = [
   {
     path: '/dashboard',
     route: DashboardRoutes,
+  },
+  {
+    path: '/ai',
+    route: AIRoutes,
   },
 ];
 

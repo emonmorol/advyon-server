@@ -41,11 +41,6 @@ const DEFAULT_AI_ANALYSIS: TAiAnalysis = {
  * @param fileText - The extracted text content from the document
  * @returns AI analysis results with summary, entities, category, and confidence
  */
-/**
- * Analyze a legal document using Google Gemini AI
- * @param fileText - The extracted text content from the document
- * @returns AI analysis results with summary, entities, category, and confidence
- */
 const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
   // Handle empty or very short text
   if (!fileText || fileText.trim().length < 10) {
@@ -226,7 +221,30 @@ const extractTextFromDocument = async (
   }
 };
 
+const chatWithAI = async (message: string, context: string, history: any[] = []): Promise<string> => {
+  try {
+    // Construct history for Gemini Pro (multi-turn chat)
+    // Simplified for now - can use startChat() from SDK if needed stateful
+    
+    const prompt = `
+    SYSTEM: You are an expert legal assistant named Advyon AI.
+    ${context ? `CONTEXT: Use the following document information to answer the user's question:\n${context}` : ''}
+    
+    USER: ${message}
+    
+    AI:`;
+
+    const result = await geminiModel.generateContent(prompt);
+    const response = await result.response;
+    return response.text();
+  } catch (error) {
+    console.error('Gemini chat error:', error);
+    return "I'm having trouble processing your request right now. Please try again.";
+  }
+};
+
 export const GeminiService = {
   analyzeLegalDocument,
   extractTextFromDocument,
+  chatWithAI,
 };

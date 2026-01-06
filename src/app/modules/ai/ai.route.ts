@@ -1,0 +1,20 @@
+import express from 'express';
+import auth from '../../middlewares/auth';
+import { AIController } from './ai.controller';
+import { DocumentControllers } from '../document/document.controller'; // Re-using for document analysis endpoint if needed
+
+const router = express.Router();
+
+router.post('/chat', auth(), AIController.chatWithAI);
+
+// Route for manual AI analysis trigger (matching client useAIStore logic)
+// POST /ai/documents/analyze { documentId: "..." }
+// We can reuse the reanalyzeDocument controller from Document module or create a wrapper
+router.post('/documents/analyze', auth(), async (req, res, next) => {
+    // Adapter to match DocumentController signature which expects :documentId in params
+    req.params.documentId = req.body.documentId;
+    // We reuse reanalyzeDocument which triggers the process
+    return DocumentControllers.reanalyzeDocument(req, res, next);
+});
+
+export const AIRoutes = router;
