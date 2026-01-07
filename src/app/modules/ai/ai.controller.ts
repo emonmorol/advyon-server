@@ -1,27 +1,62 @@
 import { Request, Response } from 'express';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
-import { GeminiService } from '../gemini/gemini.service';
+import { AIService } from './ai.service';
 import { DocumentModel } from '../document/document.model';
+import { Case as CaseModel } from '../case/case.model';
 
 const chatWithAI = catchAsync(async (req: Request, res: Response) => {
-  const { message, documentId, history } = req.body;
+  const { message, documentId, caseId, history } = req.body;
 
   let context = '';
+
+  // 1. Document Context (Most Specific)
   if (documentId) {
     const document = await DocumentModel.findOne({ id: documentId });
-    if (document && document.aiAnalysis) {
-      context = `
-      CONTEXT DOCUMENT:
+    if (document) {
+      context += `
+      FOCUS DOCUMENT:
       Title: ${document.fileName}
-      Summary: ${document.aiAnalysis.summary}
-      Category: ${document.aiAnalysis.documentCategory}
-      Key Points: ${document.aiAnalysis.keyPoints?.join('\n')}
+      Type: ${document.fileType}
+      Summary: ${document.aiAnalysis?.summary || 'No summary available'}
+      Key Points: ${document.aiAnalysis?.keyPoints?.join('\n') || 'None'}
+      Category: ${document.aiAnalysis?.documentCategory || 'Unknown'}
       `;
+
+      // Also try to get the parent case for broader context if not already provided or implied
+      if (!caseId) {
+          // If document has a case reference, we could fetch it here if needed.
+          // For now, we rely on the frontend passing caseId if known, or we just stick to document context.
+      }
     }
   }
 
-  const response = await GeminiService.chatWithAI(message, context, history);
+  // 2. Case Context (Mid Level) - appended to document context or stands alone
+  if (caseId) {
+      const caseData = await CaseModel.findOne({ id: caseId });
+      if (caseData) {
+          context += `
+          CURRENT CASE CONTEXT:
+          Case Name: ${caseData.title}
+          Case Number: ${caseData.caseNumber}
+          Status: ${caseData.status}
+          Type: ${caseData.caseType}
+          Urgency: ${caseData.urgency}
+          `;
+      }
+  }
+
+
+  // 3. Global Context (Fallback/Base) - If no specific context, AI acts as general support
+  if (!context) {
+      context = `
+      You are Advyon AI, a helpful legal assistant for the Advyon Legal Platform.
+      You are currently in the general dashboard or have no specific case context.
+      Help the user with general legal questions, navigating the platform, or creating new cases.
+      `;
+  }
+
+  const response = await AIService.chatWithAI(message, context, history);
 
   sendResponse(res, {
     statusCode: 200,

@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
 import { DocumentServices } from './document.service';
-import { GeminiService } from '../gemini/gemini.service';
+import { AIService } from '../ai/ai.service';
 import {
   uploadBufferToCloudinary,
   uploadFileToCloudinary,
@@ -103,122 +103,182 @@ const uploadDocument = catchAsync(async (req, res) => {
 
   const documentId = documentInit.documentId;
 
-  // Step 2: Upload to Cloudinary (async, but we need the URL)
-  try {
-    let cloudinaryResult;
+  // Step 2: Trigger Async Background Process (Upload + AI) and return immediately
+  // We pass the file object and other necessary details to the background function
+  processDocumentUploadAndAI(documentId, file, caseIdParam).catch((error) => {
+    console.error(`Background processing failed for document ${documentId}:`, error);
+  });
 
-    // Check if file is stored on disk (multer diskStorage) or in memory
-    if (file.path) {
-      // File is on disk
-      cloudinaryResult = await uploadFileToCloudinary(file.path, {
-        folder: `advyon/cases/${caseIdParam}/documents`,
-        publicIdPrefix: `doc_${documentId}`,
-        resourceType: 'auto',
-      });
+  // Step 3: Return immediately with document ID (status: 'pending')
+  const document = await DocumentModel.findOne({ id: documentId })
+    .populate('uploadedBy', 'id fullName email')
+    .populate('caseId', 'id caseNumber title');
 
-      // Clean up temp file only if it's a local file
-      if (!file.path.startsWith('http')) {
-        fs.unlink(file.path, (err) => {
-          if (err) console.error('Error deleting temp file:', err);
-        });
-      }
-    } else if (file.buffer) {
-      // File is in memory
-      cloudinaryResult = await uploadBufferToCloudinary(file.buffer, {
-        folder: `advyon/cases/${caseIdParam}/documents`,
-        publicIdPrefix: `doc_${documentId}`,
-        resourceType: 'auto',
-      });
-    } else {
-      throw new Error('File data not available');
-    }
-
-    // Step 3: Update DB with Cloudinary details (status: 'processing')
-    await DocumentServices.updateCloudinaryDetails(
-      documentId,
-      cloudinaryResult.secure_url,
-      cloudinaryResult.public_id,
-      cloudinaryResult.asset_id,
-    );
-
-    // Step 4: Trigger async AI analysis (don't await)
-    processDocumentWithAI(documentId, file).catch((error) => {
-      console.error(`AI processing error for document ${documentId}:`, error);
-    });
-
-    // Step 5: Return immediately with document ID
-    const document = await DocumentModel.findOne({ id: documentId })
-      .populate('uploadedBy', 'id fullName email')
-      .populate('caseId', 'id caseNumber title');
-
-    sendResponse(res, {
-      statusCode: httpStatus.CREATED,
-      success: true,
-      message: 'Document uploaded successfully. AI analysis in progress.',
-      data: {
-        document,
-        processingStatus: 'processing',
-        message: 'AI analysis is running in the background. Poll for updates.',
-      },
-    });
-  } catch (error) {
-    // Update status to failed if upload fails
-    await DocumentServices.updateProcessingStatus(
-      documentId,
-      'failed',
-      error instanceof Error ? error.message : 'Upload failed',
-    );
-
-    throw error;
-  }
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'Document upload initiated. Processing in background.',
+    data: {
+      document,
+      processingStatus: 'pending',
+      message: 'Upload and analysis running in background. Poll for updates.',
+    },
+  });
 });
 
 /**
+ * Background process for Cloudinary Upload followed by AI analysis
+ */
+async function processDocumentUploadAndAI(
+    documentId: string,
+    file: Express.Multer.File,
+    caseIdParam: string
+): Promise<void> {
+    try {
+        // Step 1: Upload to Cloudinary
+        let cloudinaryResult;
+
+        // Check if file is stored on disk (multer diskStorage) or in memory
+        if (file.path) {
+            // File is on disk
+            try {
+                cloudinaryResult = await uploadFileToCloudinary(file.path, {
+                    folder: `advyon/cases/${caseIdParam}/documents`,
+                    publicIdPrefix: `doc_${documentId}`,
+                    resourceType: 'auto',
+                });
+            } finally {
+                 // Clean up temp file only if it's a local file, regardless of upload success/failure
+                if (!file.path.startsWith('http')) {
+                    fs.unlink(file.path, (err) => {
+                        if (err) console.error('Error deleting temp file:', err);
+                    });
+                }
+            }
+        } else if (file.buffer) {
+            // File is in memory
+            cloudinaryResult = await uploadBufferToCloudinary(file.buffer, {
+                folder: `advyon/cases/${caseIdParam}/documents`,
+                publicIdPrefix: `doc_${documentId}`,
+                resourceType: 'auto',
+            });
+        } else {
+            throw new Error('File data not available');
+        }
+
+        // Step 2: Update DB with Cloudinary details (status: 'processing')
+        await DocumentServices.updateCloudinaryDetails(
+            documentId,
+            cloudinaryResult.secure_url,
+            cloudinaryResult.public_id,
+            cloudinaryResult.asset_id,
+        );
+
+        // Step 3: Trigger AI analysis
+        // We need to pass the file content to the AI. 
+        // If it was a buffer, we still have it. If it was a path, we might have deleted it, 
+        // so we should rely on the buffer or download it if needed (though we just uploaded it).
+        // Optimization: logic in processDocumentWithAI handles fetching if buffer missing.
+        // However, since we have the buffer or file path logic here, let's just proceed.
+        
+        await processDocumentWithAI(documentId, file, cloudinaryResult.secure_url);
+
+    } catch (error) {
+        console.error(`Upload processing failed for document ${documentId}:`, error);
+
+        // Update status to failed if upload fails
+        await DocumentServices.updateProcessingStatus(
+            documentId,
+            'failed',
+            error instanceof Error ? error.message : 'Upload failed',
+        );
+    }
+}
+
+/**
  * Background process for AI analysis
- * This runs asynchronously after the response is sent
+ * This runs asynchronously after the upload is complete
  */
 async function processDocumentWithAI(
   documentId: string,
   file: Express.Multer.File,
+  fileUrl?: string // Optional: URL if we just uploaded it
 ): Promise<void> {
   try {
     // Extract text from document
     let fileBuffer = file.buffer;
     
     if (!fileBuffer && file.path) {
-        if (file.path.startsWith('http')) {
-            // It's a Cloudinary URL, download it
+        // If file.path exists, it might have been deleted if it was a temp file.
+        // However, if we passed it from the upload function, we might have just deleted it.
+        // Safer to fetch from the URL we just got if we don't have the buffer.
+        
+        if (fileUrl) {
+             const axios = await import('axios');
+             const response = await axios.default.get(fileUrl, { responseType: 'arraybuffer' });
+             fileBuffer = Buffer.from(response.data);
+        } else if (file.path.startsWith('http')) {
+            // It's a remote URL already
             const axios = await import('axios');
             const response = await axios.default.get(file.path, { responseType: 'arraybuffer' });
             fileBuffer = Buffer.from(response.data);
         } else {
-             // It's a local file path
-             fileBuffer = fs.readFileSync(file.path);
+             // It's a local file path - try to read it, but catch if missing
+             try {
+                fileBuffer = fs.readFileSync(file.path);
+             } catch (e) {
+                 // If file is missing (deleted), and we have a URL (from DB??), try that.
+                 // But here we rely on fileUrl arg if possible.
+                 console.warn("Could not read local file, might be deleted. user provided URL?", fileUrl);
+                 if (!fileUrl) throw new Error("File content unavailable: Local file deleted and no URL provided.");
+             }
         }
+    }
+    
+    // If we still don't have buffer but have a URL (maybe passed or in DB), fetch it.
+    if (!fileBuffer && fileUrl) {
+         const axios = await import('axios');
+         const response = await axios.default.get(fileUrl, { responseType: 'arraybuffer' });
+         fileBuffer = Buffer.from(response.data);
     }
 
     if (!fileBuffer) {
         throw new Error('File content not available for analysis');
     }
 
-    const extractedText = await GeminiService.extractTextFromDocument(
+    const extractedText = await AIService.extractTextFromDocument(
       fileBuffer,
       file.mimetype,
     );
 
     // Analyze with Gemini AI
-    const aiAnalysis = await GeminiService.analyzeLegalDocument(extractedText);
+    const aiAnalysis = await AIService.analyzeLegalDocument(extractedText);
 
     // Update document with AI analysis results
     // Also update the folder name based on the category
-    await DocumentModel.findOneAndUpdate(
-      { id: documentId },
-      {
+    // Logic to determine final folder name
+    // 1. If AI is confident AND categorized it, we can suggest moving it.
+    // 2. BUT if the user explicitly uploaded to a specific folder (not General), we should probably keep it?
+    // 3. For now: Only move if currently 'General' or 'Other', OR if we want auto-organization.
+    // 4. If AI analysis failed (category 'Other', low confidence), definitely do NOT move it from a user-selected folder.
+    
+    const isAnalysisReliable = aiAnalysis.confidenceScore > 0.6 && aiAnalysis.documentCategory !== 'Other';
+    
+    const updateData: any = {
         processingStatus: 'completed',
         aiAnalysis,
-        analysisStatus: 'analyzed', // Legacy field
-        folderName: aiAnalysis.documentCategory || 'General', // Auto-categorize to folder
-      },
+        analysisStatus: 'analyzed',
+    };
+
+    // Only update folder if the analysis is reliable. 
+    // If analysis failed (confidence 0, category 'Other'), keep the original folder.
+    if (isAnalysisReliable && aiAnalysis.documentCategory) {
+        updateData.folderName = aiAnalysis.documentCategory;
+    }
+    
+    await DocumentModel.findOneAndUpdate(
+      { id: documentId },
+      updateData,
     );
 
     console.log(`AI analysis completed for document: ${documentId}`);

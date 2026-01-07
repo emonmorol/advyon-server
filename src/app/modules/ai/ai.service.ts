@@ -30,16 +30,42 @@ const DEFAULT_AI_ANALYSIS: TAiAnalysis = {
   keyPoints: [],
   extractedEntities: [],
   legalRefs: [],
+  suggestions: [],
   documentCategory: 'Other',
   confidenceScore: 0,
   analyzedAt: new Date(),
   modelVersion: AI_MODEL,
 };
 
+
+// Helper for retry logic
+const withRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> => {
+    try {
+        return await fn();
+    } catch (error: any) {
+        if (retries > 0 && (error?.status === 429 || error?.code === 429 || error?.response?.status === 429)) {
+            console.warn(`Rate limit hit, retrying in ${delay}ms... (${retries} attempts left)`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return withRetry(fn, retries - 1, delay * 2);
+        }
+        throw error;
+    }
+};
+
 /**
  * Analyze a legal document using Groq (Llama 3)
  */
 const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
+  // Handle scanned PDF detection
+  if (fileText === 'SCANNED_PDF_DETECTED') {
+      return {
+          ...DEFAULT_AI_ANALYSIS,
+          summary: 'This document appears to be a scanned PDF (images only). The current AI model requires text. Please upload an OCR-processed PDF, a Word document, or convert the pages to images.',
+          suggestions: ['Use an OCR tool to convert this PDF to text', 'Upload images of the pages instead', 'Ensure the PDF has selectable text'],
+          documentCategory: 'Other',
+      };
+  }
+
   // Handle empty or very short text
   if (!fileText || fileText.trim().length < 10) {
     return {
@@ -52,23 +78,26 @@ const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
   const truncatedText =
     fileText.length > 25000 ? fileText.substring(0, 25000) + '...' : fileText;
 
+  // Use JSON Schema for structured output
   const systemPrompt = `You are an expert legal aide. Analyze the provided legal document text and output structured JSON.
   
-  RETURN ONLY JSON. No markdown formatting. No \`\`\`json blocks.
-  
-  Output Schema:
+  You must strictly follow this JSON schema:
   {
     "summary": "Professional executive summary (2-3 paragraphs)",
     "rawSummary": "Detailed markdown explanation of contents",
     "keyPoints": ["point 1", "point 2", ...],
-    "extractedEntities": [{ "name": "Entity Name", "type": "person/organization/date/etc", "count": 1, "mentions": [] }],
+    "extractedEntities": [{ "name": "Entity Name", "type": "person/organization/date/location/amount", "count": 1, "mentions": ["context sentence"] }],
     "legalRefs": [{ "citation": "Law Name", "description": "desc", "relevance": "high/medium/low" }],
+    "suggestions": ["Suggestion 1 specifically for this case", "Suggestion 2..."],
     "documentCategory": "One of: ${VALID_CATEGORIES.join(', ')}",
-    "confidenceScore": 0.95
-  }`;
+    "confidenceScore": 0.95 (number between 0 and 1)
+  }
+
+  If the document is too short or unclear, give a low confidence score but still try to categorize it.
+  `;
 
   try {
-    const completion = await groqClient.chat.completions.create({
+    const completion = await withRetry(() => groqClient.chat.completions.create({
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `DOCUMENT TEXT:\n${truncatedText}` },
@@ -76,12 +105,21 @@ const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
       model: AI_MODEL,
       temperature: 0.1,
       response_format: { type: 'json_object' },
-    });
+    }));
 
     const responseText = completion.choices[0]?.message?.content || '{}';
     console.log('[Groq] Raw Response:', responseText.substring(0, 200) + '...');
 
-    const parsedResult = JSON.parse(responseText);
+    let parsedResult;
+    try {
+        parsedResult = JSON.parse(responseText);
+    } catch (e) {
+        console.error('Failed to parse AI response as JSON:', e);
+        return {
+            ...DEFAULT_AI_ANALYSIS,
+            summary: 'AI returned invalid content. Please try again.',
+        };
+    }
 
     // Validate and sanitize
     const analysis: TAiAnalysis = {
@@ -92,10 +130,11 @@ const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
         ? parsedResult.extractedEntities
         : [],
       legalRefs: Array.isArray(parsedResult.legalRefs) ? parsedResult.legalRefs : [],
+      suggestions: Array.isArray(parsedResult.suggestions) ? parsedResult.suggestions : [],
       documentCategory: VALID_CATEGORIES.includes(parsedResult.documentCategory)
         ? parsedResult.documentCategory
         : 'Other',
-      confidenceScore: parsedResult.confidenceScore || 0.5,
+      confidenceScore: typeof parsedResult.confidenceScore === 'number' ? parsedResult.confidenceScore : 0.5,
       analyzedAt: new Date(),
       modelVersion: AI_MODEL,
     };
@@ -122,17 +161,17 @@ const chatWithAI = async (message: string, context: string, history: any[] = [])
 
     const messages = [
         { role: 'system', content: systemPrompt },
-        ...history.map((msg: any) => ({ 
+        ...history.slice(-10).map((msg: any) => ({ 
             role: msg.role === 'user' ? 'user' : 'assistant', 
             content: msg.content 
         })),
         { role: 'user', content: message }
     ];
 
-    const completion = await groqClient.chat.completions.create({
+    const completion = await withRetry(() => groqClient.chat.completions.create({
       messages: messages as any,
       model: AI_MODEL,
-    });
+    }));
 
     return completion.choices[0]?.message?.content || "I couldn't generate a response.";
   } catch (error) {
@@ -149,18 +188,39 @@ const extractTextFromDocument = async (
   mimeType: string,
 ): Promise<string> => {
   try {
+    // 1. Text Files
     if (mimeType.includes('text') || mimeType.includes('plain')) {
       return buffer.toString('utf-8');
     }
+
+    // 2. PDF Files
     if (mimeType.includes('pdf') || mimeType === 'application/pdf') {
       try {
-        const pdfData = await pdfParse(buffer);
-        return pdfData.text || '';
+        let pdfParseLib = pdfParse;
+        if (typeof pdfParseLib !== 'function' && pdfParseLib.default) {
+            pdfParseLib = pdfParseLib.default;
+        }
+
+        const pdfData = await pdfParseLib(buffer);
+        let text = pdfData.text || '';
+        
+        // Simple heuristic: if text length is very small relative to number of pages, it might be scanned
+        // But pdf-parse often returns enough whitespace/newline that length check can be tricky.
+        // Better check: is there any alphanumeric content?
+        const alphaNumericCount = (text.match(/[a-zA-Z0-9]/g) || []).length;
+        
+        if (alphaNumericCount < 50 && buffer.length > 5000) {
+            return 'SCANNED_PDF_DETECTED'; 
+        }
+
+        return text;
       } catch (pdfError) {
         console.error('PDF extraction error:', pdfError);
         return '';
       }
     }
+
+    // 3. Word Documents (DOCX)
     if (
         mimeType.includes('wordprocessingml') ||
         mimeType.includes('docx') ||
@@ -174,6 +234,30 @@ const extractTextFromDocument = async (
           return '';
         }
       }
+
+    // 4. Images (OCR)
+    if (mimeType.startsWith('image/')) {
+       console.log('Attempting OCR for image...');
+       try {
+         // Dynamically import tesseract (ESM)
+         const { createWorker } = await import('tesseract.js');
+         
+         const worker = await createWorker('eng');
+         console.log('Tesseract worker created');
+         
+         const ret = await worker.recognize(buffer);
+         console.log('OCR Complete. Text length:', ret.data.text?.length);
+         
+         const text = ret.data.text;
+         await worker.terminate();
+
+         return text || '';
+       } catch (ocrError) {
+         console.error('OCR extraction error:', ocrError);
+         return '';
+       }
+    }
+    
     return '';
   } catch (error) {
     console.error('Text extraction failed:', error);
@@ -181,7 +265,7 @@ const extractTextFromDocument = async (
   }
 };
 
-export const GeminiService = {
+export const AIService = {
   analyzeLegalDocument,
   extractTextFromDocument,
   chatWithAI,

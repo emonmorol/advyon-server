@@ -44,6 +44,7 @@ export type TAiAnalysis = {
     description: string;
     relevance: 'high' | 'medium' | 'low';
   }>;
+  suggestions?: string[];
   documentCategory: TDocumentCategory | null;
   confidenceScore: number; // AI confidence (0-1)
   analyzedAt: Date; // When the analysis was performed
