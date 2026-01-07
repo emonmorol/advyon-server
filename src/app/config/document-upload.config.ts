@@ -28,26 +28,13 @@ const getResourceType = (mimetype: string): 'image' | 'video' | 'raw' => {
 };
 
 /**
- * Cloudinary storage for case documents
+ * Memory storage for case documents
+ * We use memory storage to allow:
+ * 1. AI processing using the file buffer immediately
+ * 2. Manual upload to Cloudinary in the controller
+ * 3. Avoiding double uploads and 401 errors when fetching back
  */
-const documentStorage = new CloudinaryStorage({
-  cloudinary: cloudinaryUpload,
-  params: async (req, file) => {
-    const caseId = req.params.caseId;
-    const folderName = req.body.folderName || 'General';
-    const resourceType = getResourceType(file.mimetype);
-
-    return {
-      folder: `advyon/cases/${caseId}/${folderName}`,
-      resource_type: resourceType,
-      public_id: sanitizeFilename(file.originalname),
-      // Preserve original format for non-images
-      ...(resourceType !== 'image' && {
-        format: file.mimetype.split('/')[1],
-      }),
-    };
-  },
-});
+const documentStorage = multer.memoryStorage();
 
 /**
  * Multer upload middleware for documents

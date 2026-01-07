@@ -29,32 +29,39 @@ export type TDocumentCategory =
   | 'Other';
 
 // AI Analysis results structure
-export interface TAiAnalysis {
-  summary: {
-    refined: string;
-    raw: string;
-  }; // AI-generated document summary
-  extractedEntities: string[]; // Names, Dates, Locations found
-  documentCategory: TDocumentCategory | null; // Auto-detected category
+export type TAiAnalysis = {
+  summary: string; // refined summary
+  rawSummary?: string; // markdown formatted raw summary
+  keyPoints?: string[];
+  extractedEntities: string[] | Array<{
+    name: string;
+    type: 'person' | 'organization' | 'date' | 'amount' | 'location' | 'other';
+    count: number;
+    mentions?: string[];
+  }>;
+  legalRefs?: Array<{
+    citation: string;
+    description: string;
+    relevance: 'high' | 'medium' | 'low';
+  }>;
+  suggestions?: string[];
+  documentCategory: TDocumentCategory | null;
   confidenceScore: number; // AI confidence (0-1)
-  analyzedAt?: Date; // When the analysis was performed
-  modelVersion?: string; // AI model version used for analysis
-}
+  analyzedAt: Date; // When the analysis was performed
+  modelVersion: string; // AI model version used for analysis
+};
 
 // Main document interface
 export interface TDocument extends Document {
   id: string;
   caseId: Types.ObjectId;
-  folder: string;
-  originalName: string;
-  mimeType: string;
+  folderName: string;
+  fileName: string;
+  fileType: string;
   fileSize: number;
-  storagePath: string;
+  cloudinaryUrl: string;
   cloudinaryPublicId: string;
   cloudinaryFileId: string; // For secure deletion
-  description?: string;
-  summary?: string; // Root-level summary for easy access
-  extractedText?: string; // Full extracted text content
 
   // Processing status (new AI pipeline)
   processingStatus: TDocumentProcessingStatus;
@@ -79,28 +86,28 @@ export interface TDocument extends Document {
 // Upload document payload
 export interface TUploadDocumentPayload {
   caseId: string;
-  folder: string;
-  description?: string;
+  folderName: string;
   file: Express.Multer.File;
 }
 
+// Initiate document upload payload (for service shell)
 export interface TInitiateDocumentPayload {
   caseId: string;
-  folder: string;
-  originalName: string;
-  mimeType: string;
+  folderName: string;
+  fileName: string;
+  fileType: string;
   fileSize: number;
   uploaderId: string;
-  description?: string;
 }
 
 // Query parameters for filtering documents
 export interface TDocumentQuery {
   folder?: string;
+  documentId?: string;
   processingStatus?: TDocumentProcessingStatus;
 }
 
 // Grouped documents by folder
 export interface TGroupedDocuments {
-  [folder: string]: TDocument[];
+  [folderName: string]: TDocument[];
 }

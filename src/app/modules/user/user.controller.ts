@@ -59,11 +59,11 @@ const deleteUser = catchAsync(async (req, res) => {
 
 const getMyProfile = catchAsync(async (req, res) => {
   const { userId } = req.user;
-  const result = await UserServices.getMyProfile(userId);
+  const result = await UserServices.getSingleUser(userId);
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Profile retrieved successfully',
+    message: 'User profile retrieved successfully',
     data: result,
   });
 });

@@ -3,6 +3,7 @@ import httpStatus from 'http-status';
 import AppError from '../../errors/appError';
 import { User } from '../user/user.model';
 import { Case } from '../case/case.model';
+import mongoose from 'mongoose';
 import { DocumentModel } from './document.model';
 import {
   TDocumentQuery,
@@ -20,7 +21,7 @@ const uploadDocument = async (
   caseId: string,
   userId: string,
   file: Express.Multer.File,
-  folder: string,
+  folderName: string,
 ) => {
   // Verify user exists
   const user = await User.findOne({ id: userId });
@@ -29,7 +30,15 @@ const uploadDocument = async (
   }
   
   // Verify case exists and user owns it
-  const caseData = await Case.findOne({ id: caseId });
+  let caseData;
+  if (mongoose.Types.ObjectId.isValid(caseId)) {
+    caseData = await Case.findById(caseId);
+  }
+  
+  if (!caseData) {
+    caseData = await Case.findOne({ id: caseId });
+  }
+
   if (!caseData) {
     throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
   }
@@ -51,11 +60,11 @@ const uploadDocument = async (
   const document = await DocumentModel.create({
     id: documentId,
     caseId: caseData._id,
-    folder,
-    originalName: file.originalname,
-    mimeType: fileType,
+    folderName,
+    fileName: file.originalname,
+    fileType,
     fileSize: file.size,
-    storagePath: (file as any).path, // Cloudinary URL
+    cloudinaryUrl: (file as any).path, // Cloudinary URL
     cloudinaryPublicId: (file as any).filename, // Cloudinary public ID
     analysisStatus: 'pending',
     uploadedBy: user._id,
@@ -65,7 +74,7 @@ const uploadDocument = async (
   // Log activity
   await ActivityService.logActivity({
     type: 'document_uploaded',
-    message: `Document uploaded: ${document.originalName} to folder ${folder}`,
+    message: `Document uploaded: ${document.fileName} to folder ${folderName}`,
     userId: user._id,
     caseId: caseData._id,
     documentId: document._id as any,
@@ -107,7 +116,7 @@ const getDocumentsByCase = async (
   const filter: any = { caseId: caseData._id };
 
   if (query.folder) {
-    filter.folder = query.folder;
+    filter.folderName = query.folder;
   }
 
   // Get documents
@@ -119,10 +128,10 @@ const getDocumentsByCase = async (
   const groupedDocuments: TGroupedDocuments = {};
 
   documents.forEach((doc) => {
-    if (!groupedDocuments[doc.folder]) {
-      groupedDocuments[doc.folder] = [];
+    if (!groupedDocuments[doc.folderName]) {
+      groupedDocuments[doc.folderName] = [];
     }
-    groupedDocuments[doc.folder].push(doc);
+    groupedDocuments[doc.folderName].push(doc);
   });
 
   return {
@@ -184,7 +193,7 @@ const deleteDocument = async (
   // Log activity
   await ActivityService.logActivity({
     type: 'document_deleted',
-    message: `Document deleted: ${document.originalName}`,
+    message: `Document deleted: ${document.fileName}`,
     userId: user._id,
     caseId: caseData._id,
   });
@@ -199,17 +208,33 @@ const deleteDocument = async (
  * @returns The created document ID
  */
 const initiateDocumentUpload = async (payload: TInitiateDocumentPayload) => {
-  const { caseId, folder, originalName, mimeType, fileSize, uploaderId, description } =
+  const { caseId, folderName, fileName, fileType, fileSize, uploaderId } =
     payload;
 
   // Verify user exists
-  const user = await User.findById(uploaderId);
+  let user;
+  if (mongoose.Types.ObjectId.isValid(uploaderId)) {
+      user = await User.findById(uploaderId);
+  }
+  
+  if (!user) {
+      user = await User.findOne({ id: uploaderId });
+  }
+
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
 
   // Verify case exists and user owns it
-  const caseData = await Case.findById(caseId);
+  let caseData;
+  if (mongoose.Types.ObjectId.isValid(caseId)) {
+    caseData = await Case.findById(caseId);
+  }
+  
+  if (!caseData) {
+    caseData = await Case.findOne({ id: caseId });
+  }
+
   if (!caseData) {
     throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
   }
@@ -228,11 +253,11 @@ const initiateDocumentUpload = async (payload: TInitiateDocumentPayload) => {
   const document = await DocumentModel.create({
     id: documentId,
     caseId: caseData._id,
-    folder,
-    originalName,
-    mimeType,
+    folderName,
+    fileName,
+    fileType,
     fileSize,
-    storagePath: '', // Will be updated after upload
+    cloudinaryUrl: '', // Will be updated after upload
     cloudinaryPublicId: '', // Will be updated after upload
     cloudinaryFileId: '', // Will be updated after upload
     processingStatus: 'pending',
@@ -240,7 +265,6 @@ const initiateDocumentUpload = async (payload: TInitiateDocumentPayload) => {
     uploaderId: user._id,
     uploadedBy: user._id,
     uploadedAt: new Date(),
-    description: description || '',
   });
 
   return {
@@ -291,7 +315,7 @@ const updateCloudinaryDetails = async (
   const document = await DocumentModel.findOneAndUpdate(
     { id: documentId },
     {
-      storagePath: cloudinaryUrl,
+      cloudinaryUrl,
       cloudinaryPublicId,
       cloudinaryFileId,
       processingStatus: 'processing', // Move to processing for AI analysis
@@ -306,44 +330,6 @@ const updateCloudinaryDetails = async (
   return document;
 };
 
-
-
-/**
- * Update document summary (refined or raw)
- */
-const updateSummary = async (documentId: string, payload: { rawSummary?: string, refinedSummary?: string, type: 'raw' | 'refined' }) => {
-    const document = await DocumentModel.findOne({ id: documentId });
-    if (!document) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
-    }
-
-    // Initialize aiAnalysis if needed
-    if (!document.aiAnalysis) {
-        // Create default structure if missing
-        document.aiAnalysis = {
-            summary: { raw: '', refined: '' },
-            extractedEntities: [],
-            documentCategory: null,
-            confidenceScore: 0
-        };
-    }
-    // Ensure summary object exists
-    if (!document.aiAnalysis.summary) {
-        document.aiAnalysis.summary = { raw: '', refined: '' };
-    }
-
-    if (payload.type === 'raw' && payload.rawSummary) {
-        document.aiAnalysis.summary.raw = payload.rawSummary;
-    } else if (payload.type === 'refined' && payload.refinedSummary) {
-        document.aiAnalysis.summary.refined = payload.refinedSummary;
-    }
-
-    // Mark modified because we are modifying a mixed/nested path that mongoose might not track automatically if strict is false
-    document.markModified('aiAnalysis');
-    
-    await document.save();
-    return document;
-};
 export const DocumentServices = {
   uploadDocument,
   getDocumentsByCase,
@@ -351,5 +337,4 @@ export const DocumentServices = {
   initiateDocumentUpload,
   updateProcessingStatus,
   updateCloudinaryDetails,
-  updateSummary,
 };

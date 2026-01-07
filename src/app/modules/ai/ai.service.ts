@@ -1,118 +1,272 @@
-import httpStatus from 'http-status';
-import AppError from '../../errors/appError';
-import { DocumentModel } from '../document/document.model';
-import { extractTextFromDocument } from '../../utils/document.utils';
-import { OpenRouterService } from './openrouter.service';
-import { DocumentServices } from '../document/document.service';
-import { Buffer } from 'buffer';
-import {
-  TChatRequest,
-  TChatResponse,
-  TDocumentAnalysisResponse,
-} from './ai.interface';
+/* eslint-disable @typescript-eslint/no-var-requires */
+import mammoth from 'mammoth';
+import { groqClient, AI_MODEL } from '../../config/groq.config';
+import { TAiAnalysis, TDocumentCategory } from '../document/document.interface';
 
-const processChat = async (payload: TChatRequest): Promise<TChatResponse> => {
-  try {
-    const { message, history, documentIds } = payload;
-    
-    let contextPrompt = '';
+// pdf-parse doesn't have proper ES module exports, use require
+const pdfParse = require('pdf-parse');
 
-    // Handle document context if provided
-    if (documentIds) {
-        const ids = Array.isArray(documentIds) ? documentIds : [documentIds];
-        
-        if (ids.length > 0) {
-            // Fetch documents with extractedText included
-            const documents = await DocumentModel.find({ 
-                id: { $in: ids } 
-            }).select('+extractedText');
+// Valid document categories
+const VALID_CATEGORIES: TDocumentCategory[] = [
+  'Affidavit',
+  'Evidence',
+  'Contract',
+  'Court Filing',
+  'Correspondence',
+  'Legal Brief',
+  'Pleading',
+  'Discovery',
+  'Motion',
+  'Order',
+  'Judgment',
+  'Settlement',
+  'Other',
+];
 
-            if (documents.length > 0) {
-                contextPrompt += '\n\nHere is the content of the referenced documents:\n';
-                documents.forEach((doc, index) => {
-                    const text = doc.extractedText || '';
-                    if (text) {
-                        contextPrompt += `\n--- Document ${index + 1}: ${doc.originalName} ---\n${text.substring(0, 25000)}\n`; // Limit per doc to safe size
-                    } else {
-                        contextPrompt += `\n--- Document ${index + 1}: ${doc.originalName} ---\n[Content available but not extracted. Summary: ${doc.summary || 'N/A'}]\n`;
-                    }
-                });
-                contextPrompt += '\nUse the above document content to answer the user request.\n';
-            }
+// Default/fallback AI analysis result
+const DEFAULT_AI_ANALYSIS: TAiAnalysis = {
+  summary: 'Unable to analyze document content.',
+  rawSummary: '',
+  keyPoints: [],
+  extractedEntities: [],
+  legalRefs: [],
+  suggestions: [],
+  documentCategory: 'Other',
+  confidenceScore: 0,
+  analyzedAt: new Date(),
+  modelVersion: AI_MODEL,
+};
+
+
+// Helper for retry logic
+const withRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> => {
+    try {
+        return await fn();
+    } catch (error: any) {
+        if (retries > 0 && (error?.status === 429 || error?.code === 429 || error?.response?.status === 429)) {
+            console.warn(`Rate limit hit, retrying in ${delay}ms... (${retries} attempts left)`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return withRetry(fn, retries - 1, delay * 2);
         }
+        throw error;
     }
-
-    // Process chat with context
-    const responseText = await OpenRouterService.processChat(message, history, contextPrompt);
-
-    return {
-      response: responseText,
-      suggestedActions: [], 
-    };
-  } catch (error) {
-    console.error('Chat processing error:', error);
-    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to process chat message');
-  }
 };
 
-const analyzeDocument = async (documentId: string): Promise<TDocumentAnalysisResponse> => {
-  const document = await DocumentModel.findOne({ id: documentId });
-  if (!document) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+/**
+ * Analyze a legal document using Groq (Llama 3)
+ */
+const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
+  // Handle scanned PDF detection
+  if (fileText === 'SCANNED_PDF_DETECTED') {
+      return {
+          ...DEFAULT_AI_ANALYSIS,
+          summary: 'This document appears to be a scanned PDF (images only). The current AI model requires text. Please upload an OCR-processed PDF, a Word document, or convert the pages to images.',
+          suggestions: ['Use an OCR tool to convert this PDF to text', 'Upload images of the pages instead', 'Ensure the PDF has selectable text'],
+          documentCategory: 'Other',
+      };
   }
 
-  if (!document.storagePath) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Document has no file URL');
+  // Handle empty or very short text
+  if (!fileText || fileText.trim().length < 10) {
+    return {
+      ...DEFAULT_AI_ANALYSIS,
+      summary: 'Document contains insufficient text for analysis.',
+    };
   }
+
+  // Truncate very long documents
+  const truncatedText =
+    fileText.length > 25000 ? fileText.substring(0, 25000) + '...' : fileText;
+
+  // Use JSON Schema for structured output
+  const systemPrompt = `You are an expert legal aide. Analyze the provided legal document text and output structured JSON.
+  
+  You must strictly follow this JSON schema:
+  {
+    "summary": "Professional executive summary (2-3 paragraphs)",
+    "rawSummary": "Detailed markdown explanation of contents",
+    "keyPoints": ["point 1", "point 2", ...],
+    "extractedEntities": [{ "name": "Entity Name", "type": "person/organization/date/location/amount", "count": 1, "mentions": ["context sentence"] }],
+    "legalRefs": [{ "citation": "Law Name", "description": "desc", "relevance": "high/medium/low" }],
+    "suggestions": ["Suggestion 1 specifically for this case", "Suggestion 2..."],
+    "documentCategory": "One of: ${VALID_CATEGORIES.join(', ')}",
+    "confidenceScore": 0.95 (number between 0 and 1)
+  }
+
+  If the document is too short or unclear, give a low confidence score but still try to categorize it.
+  `;
 
   try {
-    // Update status to processing
-    await DocumentServices.updateProcessingStatus(documentId, 'processing');
+    const completion = await withRetry(() => groqClient.chat.completions.create({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `DOCUMENT TEXT:\n${truncatedText}` },
+      ],
+      model: AI_MODEL,
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+    }));
 
-    // Fetch file content
-    const fileResponse = await fetch(document.storagePath);
-    if (!fileResponse.ok) {
-        throw new Error(`Failed to fetch file: ${fileResponse.statusText}`);
+    const responseText = completion.choices[0]?.message?.content || '{}';
+    console.log('[Groq] Raw Response:', responseText.substring(0, 200) + '...');
+
+    let parsedResult;
+    try {
+        parsedResult = JSON.parse(responseText);
+    } catch (e) {
+        console.error('Failed to parse AI response as JSON:', e);
+        return {
+            ...DEFAULT_AI_ANALYSIS,
+            summary: 'AI returned invalid content. Please try again.',
+        };
     }
-    
-    const arrayBuffer = await fileResponse.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const mimeType = document.mimeType || 'text/plain'; // Use stored mimeType or fallback
 
-    // Extract text
-    const text = await extractTextFromDocument(buffer, mimeType);
-    
-    // Analyze with OpenRouter
-    const analysis = await OpenRouterService.analyzeLegalDocument(text);
-
-    // Update document with analysis results
-    document.aiAnalysis = analysis;
-    document.extractedText = text;
-    document.summary = analysis.summary.refined;
-    document.processingStatus = 'completed';
-    document.analysisStatus = 'analyzed'; // Legacy field support, corrected enum value
-    await document.save();
-
-    return {
-        summary: analysis.summary, 
-        entities: analysis.extractedEntities.map(entity => ({
-            type: 'organization', // Default mapping
-            name: entity,
-            count: 1
-        })),
-        keyPoints: [],
-        legalRefs: [],
+    // Validate and sanitize
+    const analysis: TAiAnalysis = {
+      summary: parsedResult.summary || DEFAULT_AI_ANALYSIS.summary,
+      rawSummary: parsedResult.rawSummary || '',
+      keyPoints: Array.isArray(parsedResult.keyPoints) ? parsedResult.keyPoints : [],
+      extractedEntities: Array.isArray(parsedResult.extractedEntities)
+        ? parsedResult.extractedEntities
+        : [],
+      legalRefs: Array.isArray(parsedResult.legalRefs) ? parsedResult.legalRefs : [],
+      suggestions: Array.isArray(parsedResult.suggestions) ? parsedResult.suggestions : [],
+      documentCategory: VALID_CATEGORIES.includes(parsedResult.documentCategory)
+        ? parsedResult.documentCategory
+        : 'Other',
+      confidenceScore: typeof parsedResult.confidenceScore === 'number' ? parsedResult.confidenceScore : 0.5,
+      analyzedAt: new Date(),
+      modelVersion: AI_MODEL,
     };
 
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`Document analysis failed for ${documentId}:`, error);
-    await DocumentServices.updateProcessingStatus(documentId, 'failed', errorMessage);
-    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, `Analysis failed: ${errorMessage}`);
+    return analysis;
+  } catch (error) {
+    console.error('Groq AI analysis error:', error);
+    return {
+      ...DEFAULT_AI_ANALYSIS,
+      summary: 'AI analysis encountered an error. Please try again.',
+    };
   }
 };
 
-export const AIServices = {
-  processChat,
-  analyzeDocument,
+/**
+ * Chat with AI about a document
+ */
+const chatWithAI = async (message: string, context: string, history: any[] = []): Promise<string> => {
+  try {
+    const systemPrompt = `You are an expert legal assistant named Advyon AI.
+    ${context ? `CONTEXT (Use this to answer): \n${context}` : ''}
+    
+    Answer the user's question clearly and professionally. Cite the context where possible.`;
+
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        ...history.slice(-10).map((msg: any) => ({ 
+            role: msg.role === 'user' ? 'user' : 'assistant', 
+            content: msg.content 
+        })),
+        { role: 'user', content: message }
+    ];
+
+    const completion = await withRetry(() => groqClient.chat.completions.create({
+      messages: messages as any,
+      model: AI_MODEL,
+    }));
+
+    return completion.choices[0]?.message?.content || "I couldn't generate a response.";
+  } catch (error) {
+    console.error('Groq chat error:', error);
+    return "I'm having trouble processing your request right now. Please try again.";
+  }
+};
+
+/**
+ * Extract text from various document formats
+ */
+const extractTextFromDocument = async (
+  buffer: Buffer,
+  mimeType: string,
+): Promise<string> => {
+  try {
+    // 1. Text Files
+    if (mimeType.includes('text') || mimeType.includes('plain')) {
+      return buffer.toString('utf-8');
+    }
+
+    // 2. PDF Files
+    if (mimeType.includes('pdf') || mimeType === 'application/pdf') {
+      try {
+        let pdfParseLib = pdfParse;
+        if (typeof pdfParseLib !== 'function' && pdfParseLib.default) {
+            pdfParseLib = pdfParseLib.default;
+        }
+
+        const pdfData = await pdfParseLib(buffer);
+        let text = pdfData.text || '';
+        
+        // Simple heuristic: if text length is very small relative to number of pages, it might be scanned
+        // But pdf-parse often returns enough whitespace/newline that length check can be tricky.
+        // Better check: is there any alphanumeric content?
+        const alphaNumericCount = (text.match(/[a-zA-Z0-9]/g) || []).length;
+        
+        if (alphaNumericCount < 50 && buffer.length > 5000) {
+            return 'SCANNED_PDF_DETECTED'; 
+        }
+
+        return text;
+      } catch (pdfError) {
+        console.error('PDF extraction error:', pdfError);
+        return '';
+      }
+    }
+
+    // 3. Word Documents (DOCX)
+    if (
+        mimeType.includes('wordprocessingml') ||
+        mimeType.includes('docx') ||
+        mimeType.includes('msword')
+      ) {
+        try {
+          const result = await mammoth.extractRawText({ buffer });
+          return result.value || '';
+        } catch (docError) {
+          console.error('DOCX extraction error:', docError);
+          return '';
+        }
+      }
+
+    // 4. Images (OCR)
+    if (mimeType.startsWith('image/')) {
+       console.log('Attempting OCR for image...');
+       try {
+         // Dynamically import tesseract (ESM)
+         const { createWorker } = await import('tesseract.js');
+         
+         const worker = await createWorker('eng');
+         console.log('Tesseract worker created');
+         
+         const ret = await worker.recognize(buffer);
+         console.log('OCR Complete. Text length:', ret.data.text?.length);
+         
+         const text = ret.data.text;
+         await worker.terminate();
+
+         return text || '';
+       } catch (ocrError) {
+         console.error('OCR extraction error:', ocrError);
+         return '';
+       }
+    }
+    
+    return '';
+  } catch (error) {
+    console.error('Text extraction failed:', error);
+    return '';
+  }
+};
+
+export const AIService = {
+  analyzeLegalDocument,
+  extractTextFromDocument,
+  chatWithAI,
 };

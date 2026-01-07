@@ -1,19 +1,25 @@
 import httpStatus from 'http-status';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
-import { DashboardServices } from './dashboard.service';
 
-const getStats = catchAsync(async (req, res) => {
-  const result = await DashboardServices.getDashboardStats();
+const getDashboardStats = catchAsync(async (req, res) => {
+    // TODO: Replace with real aggregation queries
+    const stats = {
+        activeCases: 2,
+        upcomingHearings: 1,
+        pendingReview: 0,
+        clientMessages: 8,
+        urgentTasks: 0
+    };
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Dashboard stats retrieved successfully',
-    data: result,
+    data: stats,
   });
 });
 
 export const DashboardControllers = {
-  getStats,
+  getDashboardStats,
 };

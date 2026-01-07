@@ -3,8 +3,8 @@ import fs from 'fs';
 import mongoose from 'mongoose';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
-import { OpenRouterService } from '../ai/openrouter.service';
-import { extractTextFromDocument } from '../../utils/document.utils';
+import { DocumentServices } from './document.service';
+import { AIService } from '../ai/ai.service';
 import {
   uploadBufferToCloudinary,
   uploadFileToCloudinary,
@@ -13,7 +13,6 @@ import { DocumentModel } from './document.model';
 import { Case } from '../case/case.model';
 import { User } from '../user/user.model';
 import AppError from '../../errors/appError';
-import { DocumentServices } from './document.service';
 
 /**
  * Upload a document with AI analysis
@@ -30,7 +29,7 @@ import { DocumentServices } from './document.service';
 const uploadDocument = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { caseId: caseIdParam } = req.params;
-  const { folder, description } = req.body;
+  const { folderName, folder } = req.body;
   const file = req.file;
 
   // Validate caseId
@@ -66,11 +65,26 @@ const uploadDocument = catchAsync(async (req, res) => {
   }
 
   // Resolve user ID: might be ObjectId or custom ID (e.g., CLI-0002)
+  // Resolve user ID
+  // req.user.userId comes from auth middleware. 
+  // If it's a valid MongoID, we should try findById first.
   let resolvedUploaderId: string = userId;
   const isUserValidObjectId = mongoose.Types.ObjectId.isValid(userId);
 
-  if (!isUserValidObjectId) {
-    // It's a custom ID (e.g., CLI-0002). Find the real _id.
+  if (isUserValidObjectId) {
+    const uploaderUser = await User.findById(userId);
+    if (!uploaderUser) {
+        // Fallback: It might be a valid ObjectID string but stored in 'id' field (unlikely but possible)
+        const userByCustomId = await User.findOne({ id: userId });
+        if (!userByCustomId) {
+             throw new AppError(httpStatus.NOT_FOUND, `Uploader user not found: ${userId}`);
+        }
+        resolvedUploaderId = userByCustomId._id.toString();
+    } else {
+        resolvedUploaderId = uploaderUser._id.toString();
+    }
+  } else {
+    // It's a custom ID (e.g., CLI-0002).
     const uploaderUser = await User.findOne({ id: userId });
     if (!uploaderUser) {
       throw new AppError(httpStatus.NOT_FOUND, `Uploader user not found: ${userId}`);
@@ -80,169 +94,191 @@ const uploadDocument = catchAsync(async (req, res) => {
 
   const documentInit = await DocumentServices.initiateDocumentUpload({
     caseId: resolvedCaseId,
-    folder: folder || 'General',
-    originalName: file.originalname,
-    mimeType: file.mimetype,
+    folderName: folderName || folder || 'General',
+    fileName: file.originalname,
+    fileType: file.mimetype,
     fileSize: file.size,
     uploaderId: resolvedUploaderId,
-    description: description || '',
   });
 
-    const documentId = documentInit.documentId;
+  const documentId = documentInit.documentId;
 
-    try {
-        console.log('File uploaded via middleware:', file); 
-      // Step 2: Extract Cloudinary details (already uploaded via multer middleware)
-      if (!file.path) {
-         throw new Error('File path (Cloudinary URL) not available');
-      }
+  // Step 2: Trigger Async Background Process (Upload + AI) and return immediately
+  // We pass the file object and other necessary details to the background function
+  processDocumentUploadAndAI(documentId, file, caseIdParam).catch((error) => {
+    console.error(`Background processing failed for document ${documentId}:`, error);
+  });
 
-    const cloudinaryUrl = file.path;
-    console.log('Using Cloudinary URL:', cloudinaryUrl);
-    // Check if the URL is accessible
-    // For raw files, sometimes the extension is missing or it needs specific handling
-    
-    const cloudinaryPublicId = file.filename;
-    
-    // Step 3: Update DB with Cloudinary details (status: 'processing')
-    await DocumentServices.updateCloudinaryDetails(
-      documentId,
-      cloudinaryUrl,
-      cloudinaryPublicId,
-      cloudinaryPublicId, // Using filename as assetId since it's not strictly separate here
-    );
+  // Step 3: Return immediately with document ID (status: 'pending')
+  const document = await DocumentModel.findOne({ id: documentId })
+    .populate('uploadedBy', 'id fullName email')
+    .populate('caseId', 'id caseNumber title');
 
-    // Step 4: Trigger async AI analysis (don't await)
-    // We pass the URL so the background process can download it
-    processDocumentWithAI(documentId, cloudinaryUrl, file.mimetype, cloudinaryPublicId).catch((error) => {
-      console.error(`AI processing error for document ${documentId}:`, error);
-    });
-
-    // Step 5: Return immediately with document ID
-    const document = await DocumentModel.findOne({ id: documentId })
-      .populate('uploadedBy', 'id fullName email')
-      .populate('caseId', 'id caseNumber title');
-
-    const responseData = {
-        id: document?.id,
-        caseId: document?.caseId instanceof mongoose.Types.ObjectId ? (document?.caseId as any).id : (document?.caseId as any).caseNumber,
-        name: document?.originalName,
-        url: document?.storagePath,
-        type: document?.mimeType,
-        size: document?.fileSize,
-        folder: document?.folder,
-        uploadedAt: document?.uploadedAt,
-        processingStatus: 'queued',
-        analysisId: null
-    };
-
-    sendResponse(res, {
-      statusCode: httpStatus.OK, // User requested 200 OK
-      success: true,
-      message: 'Document uploaded successfully', // Added message field for consistency
-      data: responseData,
-    });
-  // No catch block needed here for upload failure because request shouldn't fail after DB init 
-  // if Cloudinary was already handled by middleware. 
-  // But if updateCloudinaryDetails fails, it will go to global error handler.
-  // We can wrap in try-catch if we want to update status on error, but catchAsync handles it.
-  // However, the original code had a try/catch to update status to failed.
-  } catch (error) {
-     await DocumentServices.updateProcessingStatus(
-      documentId,
-      'failed',
-      error instanceof Error ? error.message : 'Upload processing failed',
-    );
-    throw error;
-  }
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'Document upload initiated. Processing in background.',
+    data: {
+      document,
+      processingStatus: 'pending',
+      message: 'Upload and analysis running in background. Poll for updates.',
+    },
+  });
 });
 
 /**
- * Background process for AI analysis
- * This runs asynchronously after the response is sent
+ * Background process for Cloudinary Upload followed by AI analysis
  */
-// Import cloudinary to generate signed URLs
-import { cloudinaryUpload } from '../../config/cloudinary.config';
+async function processDocumentUploadAndAI(
+    documentId: string,
+    file: Express.Multer.File,
+    caseIdParam: string
+): Promise<void> {
+    try {
+        // Step 1: Upload to Cloudinary
+        let cloudinaryResult;
+
+        // Check if file is stored on disk (multer diskStorage) or in memory
+        if (file.path) {
+            // File is on disk
+            try {
+                cloudinaryResult = await uploadFileToCloudinary(file.path, {
+                    folder: `advyon/cases/${caseIdParam}/documents`,
+                    publicIdPrefix: `doc_${documentId}`,
+                    resourceType: 'auto',
+                });
+            } finally {
+                 // Clean up temp file only if it's a local file, regardless of upload success/failure
+                if (!file.path.startsWith('http')) {
+                    fs.unlink(file.path, (err) => {
+                        if (err) console.error('Error deleting temp file:', err);
+                    });
+                }
+            }
+        } else if (file.buffer) {
+            // File is in memory
+            cloudinaryResult = await uploadBufferToCloudinary(file.buffer, {
+                folder: `advyon/cases/${caseIdParam}/documents`,
+                publicIdPrefix: `doc_${documentId}`,
+                resourceType: 'auto',
+            });
+        } else {
+            throw new Error('File data not available');
+        }
+
+        // Step 2: Update DB with Cloudinary details (status: 'processing')
+        await DocumentServices.updateCloudinaryDetails(
+            documentId,
+            cloudinaryResult.secure_url,
+            cloudinaryResult.public_id,
+            cloudinaryResult.asset_id,
+        );
+
+        // Step 3: Trigger AI analysis
+        // We need to pass the file content to the AI. 
+        // If it was a buffer, we still have it. If it was a path, we might have deleted it, 
+        // so we should rely on the buffer or download it if needed (though we just uploaded it).
+        // Optimization: logic in processDocumentWithAI handles fetching if buffer missing.
+        // However, since we have the buffer or file path logic here, let's just proceed.
+        
+        await processDocumentWithAI(documentId, file, cloudinaryResult.secure_url);
+
+    } catch (error) {
+        console.error(`Upload processing failed for document ${documentId}:`, error);
+
+        // Update status to failed if upload fails
+        await DocumentServices.updateProcessingStatus(
+            documentId,
+            'failed',
+            error instanceof Error ? error.message : 'Upload failed',
+        );
+    }
+}
 
 /**
  * Background process for AI analysis
- * This runs asynchronously after the response is sent
+ * This runs asynchronously after the upload is complete
  */
 async function processDocumentWithAI(
   documentId: string,
-  fileUrl: string,
-  mimeType: string,
-  publicId: string
+  file: Express.Multer.File,
+  fileUrl?: string // Optional: URL if we just uploaded it
 ): Promise<void> {
   try {
-    console.log(`Starting AI analysis for document ${documentId}`);
+    // Extract text from document
+    let fileBuffer = file.buffer;
     
-    // Generate a signed URL for download to bypass potential access restrictions
-    // This handles cases where the raw file might be private/authenticated
-    const resourceType = mimeType.startsWith('image/') ? 'image' : mimeType.startsWith('video/') ? 'video' : 'raw';
-    
-    // We can assume format is part of publicId for raw files usually, but let's just use the publicId
-    // For raw files, we might need to be careful with the extension
-    
-    // Fallback: If publicId is missing (unlikely), stick to fileUrl.
-    let downloadUrl = fileUrl;
-    
-    console.log(`Downloading file from: ${downloadUrl}`);
-
-    // Download file content
-    let response = await fetch(downloadUrl);
-    
-    if (response.status === 401 || response.status === 403) {
-        console.log('Download failed with 401/403, attempting to generte signed URL...');
-        // Try generating a signed URL for 'authenticated' type (common for raw files restriction)
-        // Note: This assumes we have the right publicId.
-        const signedUrl = cloudinaryUpload.url(publicId, {
-            resource_type: resourceType,
-            type: 'authenticated',
-            sign_url: true,
-            secure: true
-        });
-        console.log(`Retrying with signed URL: ${signedUrl}`);
-        response = await fetch(signedUrl);
+    if (!fileBuffer && file.path) {
+        // If file.path exists, it might have been deleted if it was a temp file.
+        // However, if we passed it from the upload function, we might have just deleted it.
+        // Safer to fetch from the URL we just got if we don't have the buffer.
         
-        // If still fails, try 'private'
-        if (!response.ok) {
-             const privateUrl = cloudinaryUpload.url(publicId, {
-                resource_type: resourceType,
-                type: 'private',
-                sign_url: true,
-                secure: true
-            });
-            console.log(`Retrying with private signed URL: ${privateUrl}`);
-            response = await fetch(privateUrl);
+        if (fileUrl) {
+             const axios = await import('axios');
+             const response = await axios.default.get(fileUrl, { responseType: 'arraybuffer' });
+             fileBuffer = Buffer.from(response.data);
+        } else if (file.path.startsWith('http')) {
+            // It's a remote URL already
+            const axios = await import('axios');
+            const response = await axios.default.get(file.path, { responseType: 'arraybuffer' });
+            fileBuffer = Buffer.from(response.data);
+        } else {
+             // It's a local file path - try to read it, but catch if missing
+             try {
+                fileBuffer = fs.readFileSync(file.path);
+             } catch (e) {
+                 // If file is missing (deleted), and we have a URL (from DB??), try that.
+                 // But here we rely on fileUrl arg if possible.
+                 console.warn("Could not read local file, might be deleted. user provided URL?", fileUrl);
+                 if (!fileUrl) throw new Error("File content unavailable: Local file deleted and no URL provided.");
+             }
         }
     }
-
-    if (!response.ok) {
-        throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    const fileBuffer = Buffer.from(arrayBuffer);
     
-    // Extract text from document using the new utility
-    const extractedText = await extractTextFromDocument(
+    // If we still don't have buffer but have a URL (maybe passed or in DB), fetch it.
+    if (!fileBuffer && fileUrl) {
+         const axios = await import('axios');
+         const response = await axios.default.get(fileUrl, { responseType: 'arraybuffer' });
+         fileBuffer = Buffer.from(response.data);
+    }
+
+    if (!fileBuffer) {
+        throw new Error('File content not available for analysis');
+    }
+
+    const extractedText = await AIService.extractTextFromDocument(
       fileBuffer,
-      mimeType,
+      file.mimetype,
     );
 
-    // Analyze with OpenRouterService instead of GeminiService
-    const aiAnalysis = await OpenRouterService.analyzeLegalDocument(extractedText);
+    // Analyze with Gemini AI
+    const aiAnalysis = await AIService.analyzeLegalDocument(extractedText);
 
     // Update document with AI analysis results
+    // Also update the folder name based on the category
+    // Logic to determine final folder name
+    // 1. If AI is confident AND categorized it, we can suggest moving it.
+    // 2. BUT if the user explicitly uploaded to a specific folder (not General), we should probably keep it?
+    // 3. For now: Only move if currently 'General' or 'Other', OR if we want auto-organization.
+    // 4. If AI analysis failed (category 'Other', low confidence), definitely do NOT move it from a user-selected folder.
+    
+    const isAnalysisReliable = aiAnalysis.confidenceScore > 0.6 && aiAnalysis.documentCategory !== 'Other';
+    
+    const updateData: any = {
+        processingStatus: 'completed',
+        aiAnalysis,
+        analysisStatus: 'analyzed',
+    };
+
+    // Only update folder if the analysis is reliable. 
+    // If analysis failed (confidence 0, category 'Other'), keep the original folder.
+    if (isAnalysisReliable && aiAnalysis.documentCategory) {
+        updateData.folderName = aiAnalysis.documentCategory;
+    }
+    
     await DocumentModel.findOneAndUpdate(
       { id: documentId },
-      {
-        processingStatus: 'completed',
-        aiAnalysis: aiAnalysis,
-        extractedText: extractedText,
-        summary: aiAnalysis.summary.refined,
-        analysisStatus: 'analyzed', // Legacy field
-      },
+      updateData,
     );
 
     console.log(`AI analysis completed for document: ${documentId}`);
@@ -265,7 +301,7 @@ async function processDocumentWithAI(
 const uploadDocumentLegacy = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { caseId } = req.params;
-  const { folder } = req.body;
+  const { folderName } = req.body;
   const file = req.file;
 
   if (!file) {
@@ -281,7 +317,7 @@ const uploadDocumentLegacy = catchAsync(async (req, res) => {
     caseId,
     userId,
     file,
-    folder,
+    folderName,
   );
 
   sendResponse(res, {
@@ -306,60 +342,12 @@ const getDocuments = catchAsync(async (req, res) => {
     req.query,
   );
 
-  // Map to required format
-  // Map to required format matching user request
-  const mappedDocuments = result.documents.map((doc: any) => ({
-      id: doc.id,
-      name: doc.originalName,
-      folder: doc.folder,
-      uploadedAt: doc.uploadedAt,
-      processingStatus: doc.processingStatus === 'pending' ? 'queued' : doc.processingStatus,
-      confidenceScore: doc.aiAnalysis?.confidenceScore,
-      documentCategory: doc.aiAnalysis?.documentCategory
-  }));
-
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    data: mappedDocuments,
+    message: 'Documents retrieved successfully',
+    data: result,
   });
-});
-
-/**
- * Get document content for viewer
- * GET /documents/:id/content
- */
-const getDocumentContent = catchAsync(async (req, res) => {
-    const { documentId } = req.params; // Make sure route param matches
-    
-    // logic to get url. reusing existing service or just finding doc
-    const document = await DocumentModel.findOne({ id: documentId });
-    if (!document) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
-    }
-
-    sendResponse(res, {
-        statusCode: httpStatus.OK,
-        success: true,
-        message: 'Document content retrieved',
-        data: { url: document.storagePath }
-    });
-});
-
-/**
- * Update document summary
- * PUT /documents/:id/summary
- */
-const updateDocumentSummary = catchAsync(async (req, res) => {
-    const { documentId } = req.params;
-    const result = await DocumentServices.updateSummary(documentId, req.body);
-
-    sendResponse(res, {
-        statusCode: httpStatus.OK,
-        success: true,
-        message: 'Document summary updated',
-        data: result
-    });
 });
 
 /**
@@ -367,6 +355,34 @@ const updateDocumentSummary = catchAsync(async (req, res) => {
  * GET /cases/:caseId/documents/:documentId
  */
 const getDocument = catchAsync(async (req, res) => {
+  const { documentId } = req.params;
+
+  const document = await DocumentModel.findOne({ id: documentId })
+    .populate('uploadedBy', 'id fullName email')
+    .populate('caseId', 'id caseNumber title');
+
+  if (!document) {
+    return sendResponse(res, {
+      statusCode: httpStatus.NOT_FOUND,
+      success: false,
+      message: 'Document not found',
+      data: null,
+    });
+  }
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Document retrieved successfully',
+    data: document,
+  });
+});
+
+/**
+ * Get single document by ID (direct access)
+ * GET /documents/id/:documentId
+ */
+const getDocumentById = catchAsync(async (req, res) => {
   const { documentId } = req.params;
 
   const document = await DocumentModel.findOne({ id: documentId })
@@ -414,17 +430,12 @@ const getDocumentStatus = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
+    message: 'Document status retrieved',
     data: {
-        id: document.id,
-        processingStatus: document.processingStatus === 'pending' ? 'queued' : document.processingStatus,
-        aiAnalysis: document.aiAnalysis ? {
-            summary: document.aiAnalysis.summary.refined,
-            documentCategory: document.aiAnalysis.documentCategory,
-            confidenceScore: document.aiAnalysis.confidenceScore,
-            entities: document.aiAnalysis.extractedEntities,
-            riskScore: 0.1 // Mock risk score as it's not in our schema yet
-        } : null,
-        error: document.processingError || null
+      processingStatus: document.processingStatus,
+      processingError: document.processingError,
+      aiAnalysis: document.aiAnalysis,
+      isComplete: document.processingStatus === 'completed',
     },
   });
 });
@@ -504,8 +515,8 @@ const downloadDocument = catchAsync(async (req, res) => {
     success: true,
     message: 'Download URL retrieved successfully',
     data: {
-      downloadUrl: document.storagePath,
-      fileName: document.originalName,
+      downloadUrl: document.cloudinaryUrl,
+      fileName: document.fileName,
     },
   });
 });
@@ -515,10 +526,9 @@ export const DocumentControllers = {
   uploadDocumentLegacy,
   getDocuments,
   getDocument,
+  getDocumentById,
   getDocumentStatus,
   deleteDocument,
   reanalyzeDocument,
   downloadDocument,
-  getDocumentContent,
-  updateDocumentSummary,
 };

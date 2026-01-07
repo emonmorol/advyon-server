@@ -23,4 +23,5 @@ export default {
   clerk_secret_key: process.env.CLERK_SECRET_KEY,
   clerk_publishable_key: process.env.CLERK_PUBLISHABLE_KEY,
   openrouter_api_key: process.env.OPENROUTER_API_KEY,
+  groq_api_key: process.env.GROQ_API_KEY,
 };

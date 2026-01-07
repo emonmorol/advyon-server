@@ -9,37 +9,28 @@ import {
 // Sub-schema for AI Analysis results
 const aiAnalysisSchema = new Schema<TAiAnalysis>(
   {
-    summary: {
-      refined: {
-        type: String,
-        default: '',
-      },
-      raw: {
-        type: String,
-        default: '',
-      },
-    },
+    summary: { type: String, default: '' },
+    rawSummary: { type: String, default: '' },
+    keyPoints: { type: [String], default: [] },
     extractedEntities: {
-      type: [String],
+      type: Schema.Types.Mixed, // Can be string[] or object[]
       default: [],
     },
+    legalRefs: [
+      {
+        citation: { type: String },
+        description: { type: String },
+        relevance: { type: String, enum: ['high', 'medium', 'low'] },
+      },
+    ],
     documentCategory: {
       type: String,
       enum: [...DocumentCategory, null],
       default: null,
     },
-    confidenceScore: {
-      type: Number,
-      default: 0,
-      min: 0,
-      max: 1,
-    },
-    analyzedAt: {
-      type: Date,
-    },
-    modelVersion: {
-      type: String,
-    },
+    confidenceScore: { type: Number, default: 0, min: 0, max: 1 },
+    analyzedAt: { type: Date },
+    modelVersion: { type: String },
   },
   { _id: false },
 );
@@ -56,29 +47,25 @@ const documentSchema = new Schema<TDocument>(
       ref: 'Case',
       required: true,
     },
-    folder: {
-        type: String,
-        default: 'Unsorted'
+    folderName: {
+      type: String,
+      required: true,
     },
-    originalName: {
-        type: String,
-        required: true
+    fileName: {
+      type: String,
+      required: true,
     },
-    description: {
-        type: String,
-        default: ''
-    },
-    mimeType: {
-        type: String,
-        required: true
+    fileType: {
+      type: String,
+      required: true,
     },
     fileSize: {
       type: Number,
       required: true,
     },
-    storagePath: {
-        type: String,
-        default: ''
+    cloudinaryUrl: {
+      type: String,
+      default: '',
     },
     cloudinaryPublicId: {
       type: String,
@@ -87,10 +74,6 @@ const documentSchema = new Schema<TDocument>(
     cloudinaryFileId: {
       type: String,
       default: '',
-    },
-    extractedText: {
-      type: String,
-      select: false, // Don't return by default
     },
 
     // Processing status for AI pipeline
@@ -139,7 +122,7 @@ const documentSchema = new Schema<TDocument>(
 
 // Indexes for better query performance
 documentSchema.index({ caseId: 1 });
-documentSchema.index({ folder: 1 });
+documentSchema.index({ folderName: 1 });
 documentSchema.index({ uploadedBy: 1 });
 documentSchema.index({ uploaderId: 1 });
 documentSchema.index({ processingStatus: 1 });

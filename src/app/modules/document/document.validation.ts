@@ -3,7 +3,8 @@ import { z } from 'zod';
 export const DocumentValidation = {
   uploadDocumentValidation: z.object({
     body: z.object({
-      folder: z.string().min(1, 'Folder name is required'),
+      folderName: z.string().optional(),
+      folder: z.string().optional(),
     }),
   }),
 

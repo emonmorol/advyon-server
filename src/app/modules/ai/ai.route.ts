@@ -1,68 +1,20 @@
 import express from 'express';
-import { AIControllers } from './ai.controller';
 import auth from '../../middlewares/auth';
+import { AIController } from './ai.controller';
+import { DocumentControllers } from '../document/document.controller'; // Re-using for document analysis endpoint if needed
 
 const router = express.Router();
 
-/**
- * @swagger
- * tags:
- *   name: AI
- *   description: AI Assistant and Document Analysis
- */
+router.post('/chat', auth(), AIController.chatWithAI);
 
-/**
- * @swagger
- * /ai/chat:
- *   post:
- *     summary: Chat with AI
- *     description: Sends a message to the AI assistant and gets a response.
- *     tags: [AI]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - message
- *             properties:
- *               message:
- *                 type: string
- *               context:
- *                 type: object
- *     responses:
- *       200:
- *         description: AI response
- */
-router.post('/chat', auth(), AIControllers.chat);
-
-/**
- * @swagger
- * /ai/documents/analyze:
- *   post:
- *     summary: Analyze document
- *     description: Triggers AI analysis of a document content.
- *     tags: [AI]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - documentId
- *             properties:
- *               documentId:
- *                 type: string
- *     responses:
- *       200:
- *         description: Analysis result
- */
-router.post('/documents/analyze', auth(), AIControllers.analyzeDocument);
+// Route for manual AI analysis trigger (matching client useAIStore logic)
+// POST /ai/documents/analyze { documentId: "..." }
+// We can reuse the reanalyzeDocument controller from Document module or create a wrapper
+router.post('/documents/analyze', auth(), async (req, res, next) => {
+    // Adapter to match DocumentController signature which expects :documentId in params
+    req.params.documentId = req.body.documentId;
+    // We reuse reanalyzeDocument which triggers the process
+    return DocumentControllers.reanalyzeDocument(req, res, next);
+});
 
 export const AIRoutes = router;

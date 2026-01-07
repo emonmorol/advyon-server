@@ -54,23 +54,32 @@ router.post(
 );
 
 /**
- * @swagger
- * /cases:
- *   get:
- *     summary: Get all cases
- *     description: Retrieves a list of cases, optionally filtered.
- *     tags: [Cases]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *         description: Filter cases by status
- *     responses:
- *       200:
- *         description: List of cases retrieved successfully
+ * POST /cases/:caseId/documents
+ * Upload a document to a specific case
+ * Requires authentication and file upload
+ */
+router.post(
+  '/:caseId/documents',
+  auth(),
+  uploadDocument.single('file'),
+  validateRequest(DocumentValidation.uploadDocumentValidation),
+  DocumentControllers.uploadDocument,
+);
+
+/**
+ * GET /cases/:caseId/documents/:documentId/status
+ * Check document processing status
+ */
+router.get(
+  '/:caseId/documents/:documentId/status',
+  auth(),
+  DocumentControllers.getDocumentStatus,
+);
+
+/**
+ * GET /cases
+ * Get all cases with optional filters
+ * Requires authentication
  */
 router.get(
   '/',

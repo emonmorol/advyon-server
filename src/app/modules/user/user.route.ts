@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import express from 'express';
+import auth from '../../middlewares/auth';
 import validateRequest from '../../middlewares/validateRequest';
 import auth from '../../middlewares/auth';
 import { UserControllers } from './user.controller';
@@ -76,6 +77,12 @@ router.get(
  *       200:
  *         description: List of users retrieved successfully
  */
+router.get(
+  '/me/profile',
+  auth(),
+  UserControllers.getMyProfile,
+);
+
 router.get(
   '/',
   UserControllers.getAllUsers,
