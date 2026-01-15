@@ -37,10 +37,18 @@ const syncUserFromClerk = async (clerkUserId: string, email: string) => {
   // Create new user with temporary default role
   const userId = await generateUserId('client'); // Temporary default
 
+  // Fallback email strategy:
+  // If no email provided, create a UNIQUE placeholder to avoid E11000 duplicate key error.
+  // Format: guest_{clerkUserId}@advyon.com
+  let finalEmail = email;
+  if (!finalEmail) {
+      finalEmail = `guest_${clerkUserId}@advyon.com`.toLowerCase();
+  }
+
   const newUser = await User.create({
     id: userId,
     clerkUserId,
-    email: email ? email : 'advyon@gmail.com',
+    email: finalEmail,
     role: 'client', // Temporary default, will be set during onboarding
     status: 'in-progress',
     fullName: 'Guest User', // Temporary, will be updated during onboarding

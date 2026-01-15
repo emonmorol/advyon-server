@@ -32,10 +32,23 @@ const auth = (...requiredRoles: TUserRole[]) => {
       // Extract Clerk user data from JWT
       const clerkUserId = decoded.sub;
       
+      // Robust email extraction to prevent crashes
+      let email = decoded.email as string;
+      
+      // Fallback: Check if email is inside specific Clerk structure (unlikely in standard JWT but good safety)
+      // or if decoded.email is null/undefined
+      if (!email && (decoded as any).email_addresses && Array.isArray((decoded as any).email_addresses)) {
+         email = (decoded as any).email_addresses[0]?.email_address;
+      }
+
+      // Final Fallback: If absolutely no email found, do NOT pass undefined.
+      // Pass null so service can handle it by generating a placeholder.
+      if (!email) {
+          email = null as any; 
+      }
       
       // Find user in database by Clerk ID
       let user = await User.findOne({ clerkUserId });
-      const email = user?.email as string;
 
       if (!user) {
         // For /auth/sync endpoint, allow non-existent users
