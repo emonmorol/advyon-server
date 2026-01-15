@@ -330,6 +330,48 @@ const updateCloudinaryDetails = async (
   return document;
 };
 
+/**
+ * Get document content URL (or stream data if needed)
+ * For now returns the Cloudinary URL.
+ */
+const getDocumentContent = async (documentId: string) => {
+  const document = await DocumentModel.findOne({ id: documentId });
+  if (!document) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+  }
+  return document;
+};
+
+/**
+ * Update document summary
+ */
+const updateDocumentSummary = async (documentId: string, summary: string) => {
+  const document = await DocumentModel.findOne({ id: documentId });
+  if (!document) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+  }
+
+  // Ensure aiAnalysis object exists
+  if (!document.aiAnalysis) {
+    document.aiAnalysis = {
+        summary: '',
+        rawSummary: '',
+        keyPoints: [],
+        extractedEntities: [],
+        legalRefs: [],
+        documentCategory: null,
+        confidenceScore: 0,
+        analyzedAt: new Date(),
+        modelVersion: 'manual-update'
+    };
+  }
+
+  document.aiAnalysis.summary = summary;
+  await document.save();
+
+  return document;
+};
+
 export const DocumentServices = {
   uploadDocument,
   getDocumentsByCase,
@@ -337,4 +379,6 @@ export const DocumentServices = {
   initiateDocumentUpload,
   updateProcessingStatus,
   updateCloudinaryDetails,
+  getDocumentContent,
+  updateDocumentSummary,
 };

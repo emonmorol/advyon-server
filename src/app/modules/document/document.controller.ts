@@ -521,6 +521,51 @@ const downloadDocument = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * Get document content (viewer)
+ * GET /documents/:documentId/content
+ */
+const getDocumentContent = catchAsync(async (req, res) => {
+  const { documentId } = req.params;
+  const document = await DocumentServices.getDocumentContent(documentId);
+
+  if (!document.cloudinaryUrl) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Document content not available');
+  }
+
+  // Stream the file from Cloudinary
+  const axios = await import('axios');
+  const response = await axios.default.get(document.cloudinaryUrl, {
+    responseType: 'arraybuffer',
+  });
+
+  res.setHeader('Content-Type', document.fileType || 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${document.fileName}"`);
+  res.send(Buffer.from(response.data));
+});
+
+/**
+ * Update document summary
+ * PUT /documents/:documentId/summary
+ */
+const updateDocumentSummary = catchAsync(async (req, res) => {
+  const { documentId } = req.params;
+  const { summary } = req.body;
+
+  if (!summary) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Summary is required');
+  }
+
+  const result = await DocumentServices.updateDocumentSummary(documentId, summary);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Document summary updated successfully',
+    data: result,
+  });
+});
+
 export const DocumentControllers = {
   uploadDocument,
   uploadDocumentLegacy,
@@ -531,4 +576,6 @@ export const DocumentControllers = {
   deleteDocument,
   reanalyzeDocument,
   downloadDocument,
+  getDocumentContent,
+  updateDocumentSummary,
 };
