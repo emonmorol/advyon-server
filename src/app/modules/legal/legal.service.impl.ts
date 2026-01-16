@@ -2,7 +2,7 @@ import { Legal } from './legal.model';
 import { TLegalQuery } from './legal.interface';
 
 export const getAllLegalsFromDB = async (query: TLegalQuery) => {
-    const { search, actName, year, page = 1, limit = 10 } = query;
+    const { search, actName, year, number, page = 1, limit = 10 } = query;
 
     const queryObject: any = {};
 
@@ -21,6 +21,10 @@ export const getAllLegalsFromDB = async (query: TLegalQuery) => {
 
     if (year && year !== 'all') {
         queryObject.year = year;
+    }
+
+    if (number) {
+        queryObject.number = number;
     }
 
     const skip = (Number(page) - 1) * Number(limit);

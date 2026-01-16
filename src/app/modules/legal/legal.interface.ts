@@ -21,6 +21,7 @@ export interface TLegalQuery {
     search?: string;
     actName?: string;
     year?: string;
+    number?: string;
     page?: number;
     limit?: number;
 }
