@@ -32,8 +32,8 @@ app.use(
 
 // Rate limiting - prevent brute force attacks
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20000, // Limit each IP to 20000 requests per hour
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
@@ -50,7 +50,7 @@ app.use('/api/', limiter);
 // Stricter rate limit for auth routes (prevent brute force login)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5, // Only 5 login attempts per 15 minutes
+  max: 20, // Only 20 login attempts per 15 minutes
   message: 'Too many authentication attempts, please try again later.',
 });
 
