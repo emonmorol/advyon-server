@@ -52,7 +52,7 @@ export interface TLawyerProfile {
   barRegistrationNumber: string;
   barCouncilName: string;
   yearsOfExperience: number;
-  primaryPracticeArea: string;
+  primaryPracticeArea?: string;
   verificationStatus: 'pending' | 'verified' | 'rejected';
   verificationNotes?: string;
   createdAt: Date;
@@ -94,6 +94,10 @@ export interface TUser {
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;
+  // Gamification
+  points: number;
+  weeklyPoints: number;
+  lastWeekReset?: Date;
 }
 
 export interface UserModel extends Model<TUser> {

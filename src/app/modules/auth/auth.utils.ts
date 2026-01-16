@@ -6,7 +6,7 @@ import { JudgeProfile } from '../user/profile.model';
 // Generate role-based user IDs
 export const generateUserId = async (role: string): Promise<string> => {
   let prefix = '';
-  
+
   switch (role) {
     case 'client':
       prefix = 'CLI';
@@ -39,7 +39,7 @@ export const generateUserId = async (role: string): Promise<string> => {
     // Format: PRE-XXXX
     const lastIdParts = lastUser.id.split('-');
     if (lastIdParts.length === 2 && !isNaN(Number(lastIdParts[1]))) {
-        currentId = lastIdParts[1];
+      currentId = lastIdParts[1];
     }
   }
 
@@ -49,10 +49,36 @@ export const generateUserId = async (role: string): Promise<string> => {
 
   // Safety check: collision detection loop
   // This ensures we never produce a duplicate even if the sort failed or there are gaps
-  while (await User.findOne({ id: finalId })) {
+  // Also checks for orphan profiles (profiles that exist without a corresponding user)
+  while (true) {
+    // Check User collection
+    const userExists = await User.findOne({ id: finalId });
+    if (userExists) {
       incrementVal++;
       incrementId = incrementVal.toString().padStart(4, '0');
       finalId = `${prefix}-${incrementId}`;
+      continue;
+    }
+
+    // Check Profile collections for orphans
+    let profileExists = null;
+    if (role === 'client') {
+      profileExists = await ClientProfile.findOne({ id: `CP-${finalId}` });
+    } else if (role === 'lawyer') {
+      profileExists = await LawyerProfile.findOne({ id: `LP-${finalId}` });
+    } else if (role === 'judge') {
+      profileExists = await JudgeProfile.findOne({ id: `JP-${finalId}` });
+    }
+
+    if (profileExists) {
+      incrementVal++;
+      incrementId = incrementVal.toString().padStart(4, '0');
+      finalId = `${prefix}-${incrementId}`;
+      continue;
+    }
+
+    // If neither exists, we are safe
+    break;
   }
 
   return finalId;
@@ -61,7 +87,7 @@ export const generateUserId = async (role: string): Promise<string> => {
 // Fetch user with their role-specific profile
 export const getUserWithProfile = async (userId: string, role: string) => {
   const user = await User.findOne({ id: userId }).lean();
-  
+
   if (!user) {
     return null;
   }
@@ -79,7 +105,7 @@ export const getUserWithProfile = async (userId: string, role: string) => {
         };
       }
       break;
-    
+
     case 'lawyer':
       profile = await LawyerProfile.findOne({ userId: user._id }).lean();
       if (profile) {
@@ -94,7 +120,7 @@ export const getUserWithProfile = async (userId: string, role: string) => {
         };
       }
       break;
-    
+
     case 'judge':
       profile = await JudgeProfile.findOne({ userId: user._id }).lean();
       if (profile) {
