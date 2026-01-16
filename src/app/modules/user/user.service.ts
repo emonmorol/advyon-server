@@ -6,6 +6,8 @@ import config from '../../config';
 import AppError from '../../errors/appError';
 import { TUser } from './user.interface';
 import { User } from './user.model';
+import { Case } from '../case/case.model';
+import { CaseAccessModel } from '../caseAccess/caseAccess.model';
 import { ClientProfile, JudgeProfile, LawyerProfile } from './profile.model';
 import {
   generateAdminId,
@@ -153,6 +155,177 @@ const getMyProfile = async (userId: string) => {
   return profile;
 };
 
+// Phase 1.1: Get User Preferences
+const getPreferences = async (userId: string) => {
+  const user = await User.findOne({ id: userId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+  
+  // Return preferences with defaults if not set
+  return user.preferences || {
+    theme: 'system',
+    notifications: {
+      emailDigest: true,
+      pushAlerts: false,
+      hearingReminders: true,
+    },
+    dashboardConfig: {
+      showActivityFeed: true,
+      showAIInsights: true,
+      defaultView: 'classic',
+    },
+  };
+};
+
+// Phase 1.1: Update User Preferences
+const updatePreferences = async (userId: string, preferences: any) => {
+  const user = await User.findOne({ id: userId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+  
+  // Merge existing preferences with new ones (deep merge)
+  const currentPrefs = user.preferences as any || {};
+  const mergedPreferences = {
+    theme: preferences.theme ?? currentPrefs.theme ?? 'system',
+    notifications: {
+      emailDigest: preferences.notifications?.emailDigest ?? currentPrefs.notifications?.emailDigest ?? true,
+      pushAlerts: preferences.notifications?.pushAlerts ?? currentPrefs.notifications?.pushAlerts ?? false,
+      hearingReminders: preferences.notifications?.hearingReminders ?? currentPrefs.notifications?.hearingReminders ?? true,
+    },
+    dashboardConfig: {
+      showActivityFeed: preferences.dashboardConfig?.showActivityFeed ?? currentPrefs.dashboardConfig?.showActivityFeed ?? true,
+      showAIInsights: preferences.dashboardConfig?.showAIInsights ?? currentPrefs.dashboardConfig?.showAIInsights ?? true,
+      defaultView: preferences.dashboardConfig?.defaultView ?? currentPrefs.dashboardConfig?.defaultView ?? 'classic',
+    },
+  };
+  
+  const result = await User.findOneAndUpdate(
+    { id: userId },
+    { preferences: mergedPreferences },
+    { new: true }
+  );
+  
+  return result?.preferences;
+};
+
+// Update own profile (for profile page)
+const updateMyProfile = async (userId: string, payload: Partial<TUser>) => {
+  const user = await User.findOne({ id: userId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // Fields that can be updated by the user (exclude sensitive fields like email, role, password)
+  const allowedFields = [
+    'fullName',
+    'displayName',
+    'avatarUrl',
+    'preferredLanguage',
+    'timezone',
+    'phone',
+    'address',
+    'bio',
+  ];
+
+  const updateData: any = {};
+  for (const field of allowedFields) {
+    if ((payload as any)[field] !== undefined) {
+      updateData[field] = (payload as any)[field];
+    }
+  }
+
+  const result = await User.findOneAndUpdate(
+    { id: userId },
+    updateData,
+    { new: true }
+  );
+
+  return result;
+};
+
+// Change password
+const changePassword = async (
+  userId: string, 
+  currentPassword: string, 
+  newPassword: string
+) => {
+  const user = await User.findOne({ id: userId }).select('+password');
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // Check if current password is correct
+  if (user.password) {
+    const isPasswordValid = await User.isPasswordMatched(currentPassword, user.password);
+    if (!isPasswordValid) {
+      throw new AppError(httpStatus.UNAUTHORIZED, 'Current password is incorrect');
+    }
+  }
+
+  // Hash and update new password
+  const bcrypt = await import('bcrypt');
+  const saltRounds = Number(config.bcrypt_salt_rounds) || 12;
+  const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+  const result = await User.findOneAndUpdate(
+    { id: userId },
+    { 
+      password: hashedPassword,
+      passwordChangedAt: new Date(),
+      needsPasswordChange: false,
+    },
+    { new: true }
+  );
+
+  return { message: 'Password changed successfully' };
+};
+
+// Phase 2: Get Lawyers Clients
+const getLawyerClients = async (lawyerId: string) => {
+  const user = await User.findOne({ id: lawyerId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Lawyer not found');
+  }
+
+  // Find cases created by this lawyer
+  const cases = await Case.find({ createdBy: user._id });
+  const caseIds = cases.map((c) => c._id);
+
+  // Find users with access to these cases
+  const accesses = await CaseAccessModel.find({
+    caseId: { $in: caseIds },
+  }).populate('userId');
+
+  // Extract unique clients
+  const uniqueClients = new Map<string, any>();
+
+  for (const access of accesses) {
+    const clientUser = access.userId as any; // Populated user
+    if (clientUser && clientUser.role === 'client') {
+      if (!uniqueClients.has(clientUser.id)) {
+        // Fetch client profile for additional details
+        const clientProfile = await ClientProfile.findOne({ userId: clientUser._id });
+        
+        uniqueClients.set(clientUser.id, {
+          id: clientUser.id,
+          fullName: clientUser.fullName,
+          email: clientUser.email,
+          displayName: clientUser.displayName,
+          avatarUrl: clientUser.avatarUrl,
+          phone: clientProfile?.phoneNumber || '',
+          address: clientProfile?.address || '',
+          accessStatus: access.status, // Status in the case
+          caseId: access.caseId, // Just one case reference for now
+        });
+      }
+    }
+  }
+
+  return Array.from(uniqueClients.values());
+};
+
 export const UserServices = {
   createUser,
   getAllUsers,
@@ -160,4 +333,10 @@ export const UserServices = {
   updateUser,
   deleteUser,
   getMyProfile,
+  getPreferences,
+  updatePreferences,
+  updateMyProfile,
+  changePassword,
+  getLawyerClients,
 };
+

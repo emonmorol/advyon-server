@@ -2,6 +2,25 @@
 import { Model } from 'mongoose';
 import { USER_ROLE } from './user.constant';
 
+// User Preferences Types for Phase 1.1
+export interface TNotificationPreferences {
+  emailDigest: boolean;
+  pushAlerts: boolean;
+  hearingReminders: boolean;
+}
+
+export interface TDashboardConfig {
+  showActivityFeed: boolean;
+  showAIInsights: boolean;
+  defaultView: 'classic' | 'kanban';
+}
+
+export interface TUserPreferences {
+  theme: 'light' | 'dark' | 'system';
+  notifications: TNotificationPreferences;
+  dashboardConfig: TDashboardConfig;
+}
+
 export interface TRole {
   id: string;
   code: string;
@@ -62,12 +81,16 @@ export interface TUser {
   isEmailVerified: boolean;
   preferredLanguage?: string;
   timezone?: string;
+  phone?: string;
+  address?: string;
+  bio?: string;
   status: 'in-progress' | 'blocked' | 'active' | 'inactive';
   lastLoginAt?: Date;
   needsPasswordChange: boolean;
   passwordChangedAt?: Date;
   role: 'superAdmin' | 'admin' | 'student' | 'client' | 'lawyer' | 'judge';
   isDeleted: boolean;
+  preferences?: TUserPreferences; // Phase 1.1: User Preferences
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;

@@ -13,6 +13,38 @@ const router = express.Router();
 
 /**
  * @swagger
+ * /activities/me/recent:
+ *   get:
+ *     summary: Get my recent activities
+ *     description: Retrieves recent activities for the logged-in user
+ *     tags: [Activities]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *     responses:
+ *       200:
+ *         description: Recent activities retrieved
+ */
+router.get('/me/recent', auth(), ActivityController.getMyRecentActivities);
+
+/**
+ * @swagger
+ * /activities/me/stats:
+ *   get:
+ *     summary: Get my activity stats
+ *     description: Retrieves activity statistics for dashboard
+ *     tags: [Activities]
+ *     responses:
+ *       200:
+ *         description: Activity stats retrieved
+ */
+router.get('/me/stats', auth(), ActivityController.getMyStats);
+
+/**
+ * @swagger
  * /activities:
  *   get:
  *     summary: Get all activities
@@ -48,3 +80,4 @@ router.get('/', auth('admin', 'superAdmin', 'lawyer'), ActivityController.getAll
 router.get('/:caseId', auth('admin', 'superAdmin', 'lawyer', 'client'), ActivityController.getCaseActivities);
 
 export const ActivityRoutes = router;
+

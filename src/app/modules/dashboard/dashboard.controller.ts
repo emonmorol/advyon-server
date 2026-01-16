@@ -1,16 +1,11 @@
 import httpStatus from 'http-status';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
+import { DashboardServices } from './dashboard.service';
 
+// Legacy stats endpoint (for backwards compatibility)
 const getDashboardStats = catchAsync(async (req, res) => {
-    // TODO: Replace with real aggregation queries
-    const stats = {
-        activeCases: 2,
-        upcomingHearings: 1,
-        pendingReview: 0,
-        clientMessages: 8,
-        urgentTasks: 0
-    };
+  const stats = await DashboardServices.getDashboardStats();
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -20,6 +15,20 @@ const getDashboardStats = catchAsync(async (req, res) => {
   });
 });
 
+// Phase 1.5: Unified Dashboard Endpoint
+const getUnifiedDashboard = catchAsync(async (req, res) => {
+  const { userId } = (req as any).user;
+  const result = await DashboardServices.getUnifiedDashboard(userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Dashboard data retrieved successfully',
+    data: result,
+  });
+});
+
 export const DashboardControllers = {
   getDashboardStats,
+  getUnifiedDashboard,
 };
