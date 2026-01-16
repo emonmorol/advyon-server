@@ -97,7 +97,7 @@ const auth = (...requiredRoles: TUserRole[]) => {
       // Attach user data to request
       req.user = {
         clerkUserId,
-        email: email ? email : 'advyon@gmail.com',
+        email: email || '',
         userId: user.id,
         role: user?.role ? (user.role as TUserRole) : 'client',
         emailVerified: true,

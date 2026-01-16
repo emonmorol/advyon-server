@@ -9,6 +9,7 @@ import {
   JudgeProfile,
 } from '../user/profile.model';
 import { TOnboardPayload, TUpdateProfilePayload } from './auth.interface';
+import { clerkClient } from '@clerk/clerk-sdk-node';
 import { generateUserId, getUserWithProfile } from './auth.utils';
 
 /**
@@ -38,9 +39,22 @@ const syncUserFromClerk = async (clerkUserId: string, email: string) => {
   const userId = await generateUserId('client'); // Temporary default
 
   // Fallback email strategy:
-  // If no email provided, create a UNIQUE placeholder to avoid E11000 duplicate key error.
-  // Format: guest_{clerkUserId}@advyon.com
+  // If no email provided, try to fetch from Clerk API
   let finalEmail = email;
+  if (!finalEmail) {
+    try {
+      const clerkUser = await clerkClient.users.getUser(clerkUserId);
+      if (clerkUser.emailAddresses && clerkUser.emailAddresses.length > 0) {
+         // Use primary email if available (matched by ID), otherwise first one
+         const primaryEmail = clerkUser.emailAddresses.find(e => e.id === clerkUser.primaryEmailAddressId);
+         finalEmail = primaryEmail ? primaryEmail.emailAddress : clerkUser.emailAddresses[0].emailAddress;
+      }
+    } catch (error) {
+       console.error('Failed to fetch user from Clerk:', error);
+    }
+  }
+
+  // Final fallback: create a UNIQUE placeholder to avoid E11000 duplicate key error.
   if (!finalEmail) {
       finalEmail = `guest_${clerkUserId}@advyon.com`.toLowerCase();
   }
