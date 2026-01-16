@@ -4,17 +4,6 @@ import { LawyerProfile } from '../user/profile.model';
 import { JudgeProfile } from '../user/profile.model';
 
 // Generate role-based user IDs
-const findLastUserIdByRole = async (role: string): Promise<string | undefined> => {
-  const lastUser = await User.findOne(
-    { role },
-    { id: 1, _id: 0 }
-  )
-    .sort({ createdAt: -1 })
-    .lean();
-
-  return lastUser?.id;
-};
-
 export const generateUserId = async (role: string): Promise<string> => {
   let prefix = '';
   
@@ -35,17 +24,38 @@ export const generateUserId = async (role: string): Promise<string> => {
       prefix = 'USR';
   }
 
-  const lastUserId = await findLastUserIdByRole(role);
+  // Find the last user by ID (lexicographical sort works for fixed-length strings like CLI-0001)
+  const lastUser = await User.findOne(
+    { role },
+    { id: 1, _id: 0 }
+  )
+    .sort({ id: -1 })
+    .lean();
+
   let currentId = '0000';
 
-  if (lastUserId) {
+  if (lastUser && lastUser.id) {
     // Extract the numeric part after the prefix and hyphen
-    const numericPart = lastUserId.substring(4); // After "XXX-"
-    currentId = numericPart;
+    // Format: PRE-XXXX
+    const lastIdParts = lastUser.id.split('-');
+    if (lastIdParts.length === 2 && !isNaN(Number(lastIdParts[1]))) {
+        currentId = lastIdParts[1];
+    }
   }
 
-  const incrementId = (Number(currentId) + 1).toString().padStart(4, '0');
-  return `${prefix}-${incrementId}`;
+  let incrementVal = Number(currentId) + 1;
+  let incrementId = incrementVal.toString().padStart(4, '0');
+  let finalId = `${prefix}-${incrementId}`;
+
+  // Safety check: collision detection loop
+  // This ensures we never produce a duplicate even if the sort failed or there are gaps
+  while (await User.findOne({ id: finalId })) {
+      incrementVal++;
+      incrementId = incrementVal.toString().padStart(4, '0');
+      finalId = `${prefix}-${incrementId}`;
+  }
+
+  return finalId;
 };
 
 // Fetch user with their role-specific profile

@@ -68,6 +68,78 @@ const getMyProfile = catchAsync(async (req, res) => {
   });
 });
 
+// Phase 1.1: Get My Preferences
+const getMyPreferences = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const result = await UserServices.getPreferences(userId);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'User preferences retrieved successfully',
+    data: result,
+  });
+});
+
+// Phase 1.1: Update My Preferences
+const updateMyPreferences = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const result = await UserServices.updatePreferences(userId, req.body);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'User preferences updated successfully',
+    data: result,
+  });
+});
+
+// Update my profile
+const updateMyProfile = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const result = await UserServices.updateMyProfile(userId, req.body);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Profile updated successfully',
+    data: result,
+  });
+});
+
+// Change password
+const changePassword = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const { currentPassword, newPassword } = req.body;
+  
+  if (!currentPassword || !newPassword) {
+    sendResponse(res, {
+      statusCode: httpStatus.BAD_REQUEST,
+      success: false,
+      message: 'Current password and new password are required',
+      data: null,
+    });
+    return;
+  }
+  
+  const result = await UserServices.changePassword(userId, currentPassword, newPassword);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Password changed successfully',
+    data: result,
+  });
+});
+
+// Phase 2: Get Lawyer Clients
+const getLawyerClients = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const result = await UserServices.getLawyerClients(userId);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Clients retrieved successfully',
+    data: result,
+  });
+});
+
 export const UserControllers = {
   createUser,
   getAllUsers,
@@ -75,4 +147,10 @@ export const UserControllers = {
   updateUser,
   deleteUser,
   getMyProfile,
+  getMyPreferences,
+  updateMyPreferences,
+  updateMyProfile,
+  changePassword,
+  getLawyerClients,
 };
+
