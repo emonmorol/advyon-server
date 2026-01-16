@@ -24,7 +24,36 @@ const getCaseActivities = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// Phase 1.3: Get my recent activities
+const getMyRecentActivities = catchAsync(async (req: Request, res: Response) => {
+  const { userId } = (req as any).user;
+  const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+  
+  const result = await ActivityService.getRecentByUser(userId, limit);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Recent activities fetched successfully',
+    data: result,
+  });
+});
+
+// Phase 1.3: Get my activity stats
+const getMyStats = catchAsync(async (req: Request, res: Response) => {
+  const { userId } = (req as any).user;
+  
+  const result = await ActivityService.getStats(userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Activity stats fetched successfully',
+    data: result,
+  });
+});
+
 export const ActivityController = {
   getAllActivities,
   getCaseActivities,
+  getMyRecentActivities,
+  getMyStats,
 };
