@@ -81,6 +81,9 @@ export interface TUser {
   isEmailVerified: boolean;
   preferredLanguage?: string;
   timezone?: string;
+  phone?: string;
+  address?: string;
+  bio?: string;
   status: 'in-progress' | 'blocked' | 'active' | 'inactive';
   lastLoginAt?: Date;
   needsPasswordChange: boolean;

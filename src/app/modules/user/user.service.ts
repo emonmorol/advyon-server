@@ -240,29 +240,6 @@ const updateMyProfile = async (userId: string, payload: Partial<TUser>) => {
     { new: true }
   );
 
-  // Also update role-specific profile if phone/address changed
-  if (payload.phone || payload.address) {
-    if (user.role === 'client') {
-      await ClientProfile.findOneAndUpdate(
-        { userId: user._id },
-        { 
-          ...(payload.phone && { phoneNumber: payload.phone }),
-          ...(payload.address && { address: payload.address }),
-        },
-        { upsert: true }
-      );
-    } else if (user.role === 'lawyer') {
-      await LawyerProfile.findOneAndUpdate(
-        { userId: user._id },
-        { 
-          ...(payload.phone && { phoneNumber: payload.phone }),
-          ...(payload.address && { address: payload.address }),
-        },
-        { upsert: true }
-      );
-    }
-  }
-
   return result;
 };
 

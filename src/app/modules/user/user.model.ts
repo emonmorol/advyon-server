@@ -50,6 +50,15 @@ const userSchema = new Schema<TUser, UserModel>(
     timezone: {
       type: String,
     },
+    phone: {
+      type: String,
+    },
+    address: {
+      type: String,
+    },
+    bio: {
+      type: String,
+    },
     needsPasswordChange: {
       type: Boolean,
       default: true,
