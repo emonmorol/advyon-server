@@ -10,6 +10,9 @@ router.get('/stats', CommunityController.getCommunityStats);
 // Trending topics endpoint (public)
 router.get('/trending-topics', CommunityController.getTrendingTopics);
 
+// Top contributors endpoint (public)
+router.get('/top-contributors', CommunityController.getTopContributors);
+
 // Thread routes
 router.post('/threads', auth('client', 'lawyer', 'admin'), CommunityController.createThread);
 router.get('/threads', CommunityController.getAllThreads);

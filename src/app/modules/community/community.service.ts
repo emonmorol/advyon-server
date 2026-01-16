@@ -2,6 +2,7 @@ import { Thread, Reply } from './community.model';
 import { TThread, TReply } from './community.interface';
 import QueryBuilder from '../../builder/queryBuilder';
 import { User } from '../user/user.model';
+import { GamificationService } from '../gamification/gamification.service';
 
 // Helper to get MongoDB ObjectId from custom user id
 const getUserObjectId = async (customUserId: string) => {
@@ -14,6 +15,10 @@ const createThread = async (payload: TThread & { author: string }) => {
   // Convert custom user id to MongoDB ObjectId
   const authorObjectId = await getUserObjectId(payload.author as any);
   const result = await Thread.create({ ...payload, author: authorObjectId });
+
+  // Award points for creating thread
+  GamificationService.awardPoints(payload.author, 'CREATE_THREAD', result._id.toString());
+
   return result;
 };
 
@@ -192,6 +197,9 @@ const addReply = async (payload: TReply & { author: string }) => {
   // Increment replies count on thread
   await Thread.findByIdAndUpdate(payload.threadId, { $inc: { repliesCount: 1 } });
 
+  // Award points for adding reply
+  GamificationService.awardPoints(payload.author, 'ADD_REPLY', result._id.toString());
+
   return result;
 };
 
@@ -278,6 +286,18 @@ const voteReply = async (replyId: string, userId: string, direction: 'up' | 'dow
   }
 
   await reply.save();
+
+  // Award/deduct points to reply author for votes
+  // Get the reply author's custom user id
+  const replyAuthor = await User.findById(reply.author);
+  if (replyAuthor) {
+    if (direction === 'up' && !isUpvoted) {
+      GamificationService.awardPoints(replyAuthor.id, 'UPVOTE_RECEIVED', replyId);
+    } else if (direction === 'down' && !isDownvoted) {
+      GamificationService.deductPoints(replyAuthor.id, 'DOWNVOTE_RECEIVED', replyId);
+    }
+  }
+
   return reply;
 }
 
@@ -295,9 +315,17 @@ const markAsSolved = async (threadId: string, replyId: string, userId: string) =
   await Reply.updateMany({ threadId }, { isAcceptedAnswer: false });
 
   // Mark the new accepted answer
-  const reply = await Reply.findByIdAndUpdate(replyId, { isAcceptedAnswer: true }, { new: true });
+  const reply = await Reply.findByIdAndUpdate(replyId, { isAcceptedAnswer: true }, { new: true }).populate('author');
   thread.isSolved = true;
   await thread.save();
+
+  // Award bonus points for accepted answer
+  if (reply && reply.author) {
+    const replyAuthor = await User.findById(reply.author);
+    if (replyAuthor) {
+      GamificationService.awardPoints(replyAuthor.id, 'ACCEPTED_ANSWER', replyId);
+    }
+  }
 
   return { thread, reply };
 }
@@ -352,6 +380,15 @@ const getTrendingTopics = async (limit: number = 10) => {
   return result;
 }
 
+const getTopContributors = async (limit: number = 10) => {
+  const contributors = await User.find({ isDeleted: false })
+    .sort({ points: -1 })
+    .limit(limit)
+    .select('id fullName avatarUrl role points weeklyPoints');
+
+  return contributors;
+}
+
 export const CommunityService = {
   createThread,
   getAllThreads,
@@ -362,4 +399,5 @@ export const CommunityService = {
   markAsSolved,
   getCommunityStats,
   getTrendingTopics,
+  getTopContributors,
 };

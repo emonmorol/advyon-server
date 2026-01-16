@@ -97,6 +97,17 @@ const getTrendingTopics = catchAsync(async (req, res) => {
   })
 })
 
+const getTopContributors = catchAsync(async (req, res) => {
+  const limit = Number(req.query.limit) || 10;
+  const result = await CommunityService.getTopContributors(limit);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Top contributors retrieved',
+    data: result
+  })
+})
+
 export const CommunityController = {
   createThread,
   getAllThreads,
@@ -107,4 +118,5 @@ export const CommunityController = {
   markAsSolved,
   getCommunityStats,
   getTrendingTopics,
+  getTopContributors,
 };
