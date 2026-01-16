@@ -52,7 +52,7 @@ export interface TLawyerProfile {
   barRegistrationNumber: string;
   barCouncilName: string;
   yearsOfExperience: number;
-  primaryPracticeArea: string;
+  primaryPracticeArea?: string;
   verificationStatus: 'pending' | 'verified' | 'rejected';
   verificationNotes?: string;
   createdAt: Date;

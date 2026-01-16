@@ -70,7 +70,7 @@ const moduleRoutes = [
   {
     path: '/legal',
     route: LegalRoutes,
-  // Phase 1.2: Message/Client Requests
+  },
   {
     path: '/messages',
     route: MessageRoutes,
