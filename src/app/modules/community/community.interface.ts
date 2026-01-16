@@ -8,6 +8,7 @@ export interface TReply {
     content: string;
     author: Types.ObjectId;
     upvotes: Types.ObjectId[];
+    downvotes: Types.ObjectId[];
     isAcceptedAnswer: boolean;
     createdAt?: Date;
     updatedAt?: Date;
@@ -22,6 +23,7 @@ export interface TThread {
     tags: string[];
     views: number;
     upvotes: Types.ObjectId[];
+    downvotes: Types.ObjectId[];
     isSolved: boolean;
     repliesCount?: number;
     createdAt?: Date;

@@ -45,11 +45,43 @@ const addReply = catchAsync(async (req, res) => {
 });
 
 const voteThread = catchAsync(async (req, res) => {
-  const result = await CommunityService.voteThread(req.params.id, req.user.userId);
+  const direction = req.body.direction || 'up'; // default to up
+  const result = await CommunityService.voteThread(req.params.id, req.user.userId, direction);
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Vote updated',
+    data: result
+  })
+})
+
+const voteReply = catchAsync(async (req, res) => {
+  const direction = req.body.direction || 'up'; // default to up
+  const result = await CommunityService.voteReply(req.params.replyId, req.user.userId, direction);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Reply vote updated',
+    data: result
+  })
+})
+
+const markAsSolved = catchAsync(async (req, res) => {
+  const result = await CommunityService.markAsSolved(req.params.id, req.body.replyId, req.user.userId);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Thread marked as solved',
+    data: result
+  })
+})
+
+const getCommunityStats = catchAsync(async (req, res) => {
+  const result = await CommunityService.getCommunityStats();
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Community stats retrieved',
     data: result
   })
 })
@@ -59,5 +91,8 @@ export const CommunityController = {
   getAllThreads,
   getThreadById,
   addReply,
-  voteThread
+  voteThread,
+  voteReply,
+  markAsSolved,
+  getCommunityStats,
 };

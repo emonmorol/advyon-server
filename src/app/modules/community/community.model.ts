@@ -6,6 +6,7 @@ const replySchema = new Schema<TReply>({
     content: { type: String, required: true },
     author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     upvotes: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    downvotes: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     isAcceptedAnswer: { type: Boolean, default: false },
 }, { timestamps: true });
 
@@ -21,6 +22,7 @@ const threadSchema = new Schema<TThread>({
     tags: [{ type: String }],
     views: { type: Number, default: 0 },
     upvotes: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    downvotes: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     isSolved: { type: Boolean, default: false },
 }, {
     timestamps: true,
