@@ -12,6 +12,7 @@ import { MetadataRoutes } from '../modules/metadata/metadata.route';
 import { AdminRoutes } from '../modules/admin/admin.route';
 import { DashboardRoutes } from '../modules/dashboard/dashboard.route';
 import { AIRoutes } from '../modules/ai/ai.route';
+import { CommunityRoutes } from '../modules/community/community.route';
 
 const router = Router();
 
@@ -63,6 +64,10 @@ const moduleRoutes = [
   {
     path: '/ai',
     route: AIRoutes,
+  },
+  {
+    path: '/community',
+    route: CommunityRoutes,
   },
 ];
 
