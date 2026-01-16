@@ -14,6 +14,7 @@ import { DashboardRoutes } from '../modules/dashboard/dashboard.route';
 import { AIRoutes } from '../modules/ai/ai.route';
 import { LegalRoutes } from '../modules/legal/legal.route';
 import { MessageRoutes } from '../modules/message/message.route';
+import { CommunityRoutes } from '../modules/community/community.route';
 
 const router = Router();
 
@@ -69,10 +70,14 @@ const moduleRoutes = [
   {
     path: '/legal',
     route: LegalRoutes,
-  // Phase 1.2: Message/Client Requests
+  },
   {
     path: '/messages',
     route: MessageRoutes,
+  },
+  {
+    path: '/community',
+    route: CommunityRoutes,
   },
 ];
 

@@ -10,7 +10,7 @@ const createLawyerProfileValidationSchema = z.object({
   barRegistrationNumber: z.string(),
   barCouncilName: z.string(),
   yearsOfExperience: z.number(),
-  primaryPracticeArea: z.string(),
+  primaryPracticeArea: z.string().optional(),
   verificationNotes: z.string().optional(),
 });
 

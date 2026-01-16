@@ -107,6 +107,19 @@ const userSchema = new Schema<TUser, UserModel>(
         },
       },
     },
+    // Gamification fields
+    points: {
+      type: Number,
+      default: 0,
+    },
+    weeklyPoints: {
+      type: Number,
+      default: 0,
+    },
+    lastWeekReset: {
+      type: Date,
+      default: Date.now,
+    },
   },
   {
     timestamps: true,
@@ -146,7 +159,7 @@ userSchema.statics.isPasswordMatched = async function (
 userSchema.statics.isJWTIssuedBeforePasswordChanged = function (
   passwordChangedTimestamp: Date,
   jwtIssuedTimestamp: number,
-  
+
 ) {
   const passwordChangedTime =
     new Date(passwordChangedTimestamp).getTime() / 1000;
