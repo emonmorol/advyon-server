@@ -67,6 +67,79 @@ router.get(
 
 /**
  * @swagger
+ * /users/me/profile:
+ *   patch:
+ *     summary: Update my profile
+ *     description: Updates the profile of the logged-in user. Email cannot be changed.
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               fullName:
+ *                 type: string
+ *               displayName:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *               avatarUrl:
+ *                 type: string
+ *               bio:
+ *                 type: string
+ *               timezone:
+ *                 type: string
+ *               preferredLanguage:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Profile updated successfully
+ */
+router.patch(
+  '/me/profile',
+  auth(),
+  UserControllers.updateMyProfile,
+);
+
+/**
+ * @swagger
+ * /users/me/change-password:
+ *   post:
+ *     summary: Change password
+ *     description: Changes the password of the logged-in user.
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - currentPassword
+ *               - newPassword
+ *             properties:
+ *               currentPassword:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Password changed successfully
+ *       401:
+ *         description: Current password is incorrect
+ */
+router.post(
+  '/me/change-password',
+  auth(),
+  UserControllers.changePassword,
+);
+
+/**
+ * @swagger
  * /users/me/preferences:
  *   get:
  *     summary: Get my preferences

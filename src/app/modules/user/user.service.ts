@@ -208,6 +208,101 @@ const updatePreferences = async (userId: string, preferences: any) => {
   return result?.preferences;
 };
 
+// Update own profile (for profile page)
+const updateMyProfile = async (userId: string, payload: Partial<TUser>) => {
+  const user = await User.findOne({ id: userId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // Fields that can be updated by the user (exclude sensitive fields like email, role, password)
+  const allowedFields = [
+    'fullName',
+    'displayName',
+    'avatarUrl',
+    'preferredLanguage',
+    'timezone',
+    'phone',
+    'address',
+    'bio',
+  ];
+
+  const updateData: any = {};
+  for (const field of allowedFields) {
+    if ((payload as any)[field] !== undefined) {
+      updateData[field] = (payload as any)[field];
+    }
+  }
+
+  const result = await User.findOneAndUpdate(
+    { id: userId },
+    updateData,
+    { new: true }
+  );
+
+  // Also update role-specific profile if phone/address changed
+  if (payload.phone || payload.address) {
+    if (user.role === 'client') {
+      await ClientProfile.findOneAndUpdate(
+        { userId: user._id },
+        { 
+          ...(payload.phone && { phoneNumber: payload.phone }),
+          ...(payload.address && { address: payload.address }),
+        },
+        { upsert: true }
+      );
+    } else if (user.role === 'lawyer') {
+      await LawyerProfile.findOneAndUpdate(
+        { userId: user._id },
+        { 
+          ...(payload.phone && { phoneNumber: payload.phone }),
+          ...(payload.address && { address: payload.address }),
+        },
+        { upsert: true }
+      );
+    }
+  }
+
+  return result;
+};
+
+// Change password
+const changePassword = async (
+  userId: string, 
+  currentPassword: string, 
+  newPassword: string
+) => {
+  const user = await User.findOne({ id: userId }).select('+password');
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // Check if current password is correct
+  if (user.password) {
+    const isPasswordValid = await User.isPasswordMatched(currentPassword, user.password);
+    if (!isPasswordValid) {
+      throw new AppError(httpStatus.UNAUTHORIZED, 'Current password is incorrect');
+    }
+  }
+
+  // Hash and update new password
+  const bcrypt = await import('bcrypt');
+  const saltRounds = Number(config.bcrypt_salt_rounds) || 12;
+  const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+  const result = await User.findOneAndUpdate(
+    { id: userId },
+    { 
+      password: hashedPassword,
+      passwordChangedAt: new Date(),
+      needsPasswordChange: false,
+    },
+    { new: true }
+  );
+
+  return { message: 'Password changed successfully' };
+};
+
 export const UserServices = {
   createUser,
   getAllUsers,
@@ -217,4 +312,7 @@ export const UserServices = {
   getMyProfile,
   getPreferences,
   updatePreferences,
+  updateMyProfile,
+  changePassword,
 };
+

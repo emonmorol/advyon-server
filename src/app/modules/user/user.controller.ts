@@ -92,6 +92,42 @@ const updateMyPreferences = catchAsync(async (req, res) => {
   });
 });
 
+// Update my profile
+const updateMyProfile = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const result = await UserServices.updateMyProfile(userId, req.body);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Profile updated successfully',
+    data: result,
+  });
+});
+
+// Change password
+const changePassword = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const { currentPassword, newPassword } = req.body;
+  
+  if (!currentPassword || !newPassword) {
+    sendResponse(res, {
+      statusCode: httpStatus.BAD_REQUEST,
+      success: false,
+      message: 'Current password and new password are required',
+      data: null,
+    });
+    return;
+  }
+  
+  const result = await UserServices.changePassword(userId, currentPassword, newPassword);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Password changed successfully',
+    data: result,
+  });
+});
+
 export const UserControllers = {
   createUser,
   getAllUsers,
@@ -101,4 +137,7 @@ export const UserControllers = {
   getMyProfile,
   getMyPreferences,
   updateMyPreferences,
+  updateMyProfile,
+  changePassword,
 };
+
