@@ -204,6 +204,7 @@ async function processDocumentWithAI(
   file: Express.Multer.File,
   fileUrl?: string // Optional: URL if we just uploaded it
 ): Promise<void> {
+  console.log(`[Document Controller] processDocumentWithAI started for Doc ID: ${documentId}`);
   try {
     // Extract text from document
     let fileBuffer = file.buffer;
@@ -251,8 +252,16 @@ async function processDocumentWithAI(
       file.mimetype,
     );
 
+    console.log(`[Document Controller] Text extracted. Length: ${extractedText?.length}`);
+
+    if (!extractedText || extractedText.length < 10) {
+        console.warn(`[Document Controller] Warning: Insufficient text for analysis for Doc ID: ${documentId}`);
+    }
+
     // Analyze with Gemini AI
-    const aiAnalysis = await AIService.analyzeLegalDocument(extractedText);
+    console.log(`[Document Controller] Sending to AI Service...`);
+    const aiAnalysis = await AIService.analyzeLegalDocument(extractedText, fileBuffer, file.mimetype);
+    console.log(`[Document Controller] AI Analysis received. Confidence: ${aiAnalysis.confidenceScore}, Category: ${aiAnalysis.documentCategory}`);
 
     // Update document with AI analysis results
     // Also update the folder name based on the category
@@ -276,10 +285,17 @@ async function processDocumentWithAI(
         updateData.folderName = aiAnalysis.documentCategory;
     }
     
-    await DocumentModel.findOneAndUpdate(
+    const updatedDoc = await DocumentModel.findOneAndUpdate(
       { id: documentId },
       updateData,
+      { new: true } // Return updated doc
     );
+
+    if (updatedDoc) {
+        console.log(`[Document Controller] DB Updated successfully for Doc ID: ${documentId}. AI Status: ${updatedDoc.analysisStatus}`);
+    } else {
+        console.error(`[Document Controller] CRITICAL: DB Update failed! Document not found for ID: ${documentId}`);
+    }
 
     console.log(`AI analysis completed for document: ${documentId}`);
   } catch (error) {

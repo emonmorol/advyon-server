@@ -1,11 +1,13 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 import mammoth from 'mammoth';
-import { groqClient, AI_MODEL as GROQ_MODEL } from '../../config/groq.config'; // Renamed import
-import { geminiModel } from '../../config/gemini.config'; // New import
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+// @ts-ignore
+import pdfParse from 'pdf-parse'; // Use ES import with interop
+import { groqClient, AI_MODEL as GROQ_MODEL } from '../../config/groq.config';
+import { geminiModel, fileManager } from '../../config/gemini.config';
 import { TAiAnalysis, TDocumentCategory } from '../document/document.interface';
-
-// pdf-parse doesn't have proper ES module exports, use require
-const pdfParse = require('pdf-parse');
 
 // Valid document categories
 const VALID_CATEGORIES: TDocumentCategory[] = [
@@ -35,9 +37,8 @@ const DEFAULT_AI_ANALYSIS: TAiAnalysis = {
   documentCategory: 'Other',
   confidenceScore: 0,
   analyzedAt: new Date(),
-  modelVersion: 'gemini-1.5-flash',
+  modelVersion: 'gemini-2.5-pro',
 };
-
 
 // Helper for retry logic
 const withRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> => {
@@ -54,34 +55,40 @@ const withRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 1000): Pr
 };
 
 /**
- * Analyze a legal document using Groq (Llama 3)
+ * Upload buffer to Gemini File API
+ * @deprecated Use only as fallback for purely visual documents to save quota.
  */
+const uploadToGemini = async (buffer: Buffer, mimeType: string): Promise<string> => {
+    const tempFilePath = path.join(os.tmpdir(), `gemini_upload_${Date.now()}.${mimeType.split('/')[1]}`);
+    try {
+        fs.writeFileSync(tempFilePath, buffer as any); // Cast to any/Uint8Array to satisfy fs types
+        
+        const uploadResponse = await fileManager.uploadFile(tempFilePath, {
+            mimeType,
+            displayName: "Legal Document Analysis"
+        });
+
+        console.log(`[AI Service] Uploaded to Gemini: ${uploadResponse.file.uri}`);
+        return uploadResponse.file.uri;
+    } catch (error) {
+        console.error("Failed to upload to Gemini:", error);
+        throw error;
+    } finally {
+        if (fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+        }
+    }
+}
+
 /**
  * Analyze a legal document using Google Gemini (1.5 Flash)
+ * IMPL STRATEGY: Text-First to save tokens and avoid Rate Limits.
  */
-const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
-  // Handle scanned PDF detection
-  if (fileText === 'SCANNED_PDF_DETECTED') {
-      return {
-          ...DEFAULT_AI_ANALYSIS,
-          summary: 'This document appears to be a scanned PDF (images only). The current AI model requires text. Please upload an OCR-processed PDF, a Word document, or convert the pages to images.',
-          suggestions: ['Use an OCR tool to convert this PDF to text', 'Upload images of the pages instead', 'Ensure the PDF has selectable text'],
-          documentCategory: 'Other',
-      };
-  }
-
-  // Handle empty or very short text
-  if (!fileText || fileText.trim().length < 10) {
-    return {
-      ...DEFAULT_AI_ANALYSIS,
-      summary: 'Document contains insufficient text for analysis.',
-    };
-  }
-
-  // Use JSON Schema for structured output
-  // Gemini supports JSON mode natively, but requires specific prompting or configuration.
-  // 1.5 Flash is good at following constraints.
-  const prompt = `You are an expert legal aide. Analyze the provided legal document text and output structured JSON.
+const analyzeLegalDocument = async (fileText: string, buffer?: Buffer, mimeType?: string): Promise<TAiAnalysis> => {
+  console.log(`[AI Service] Starting Legal Document Analysis. Input text length: ${fileText?.length || 0}`);
+  
+  // JSON Schema validation instructions
+  const promptInstructions = `You are an expert legal aide. Analyze the provided legal document text and output structured JSON.
   
   You must strictly follow this JSON schema:
   {
@@ -92,42 +99,69 @@ const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
     "legalRefs": [{ "citation": "Law Name", "description": "desc", "relevance": "high/medium/low" }],
     "suggestions": ["Suggestion 1 specifically for this case", "Suggestion 2..."],
     "documentCategory": "One of: ${VALID_CATEGORIES.join(', ')}",
-    "confidenceScore": 0.95 (number between 0 and 1)
+    "confidenceScore": 0.95
   }
 
   If the document is too short or unclear, give a low confidence score but still try to categorize it.
-  
-  DOCUMENT TEXT:
-  ${fileText.substring(0, 900000)} 
-  // Gemini Flash has 1M context, so we can send a lot more text than Grok. 
-  // Safety cap at 900k chars to be safe.
   `;
+
+  let contentParts: any[] = [];
+  
+  // 1. PRIMARY STRATEGY: USE EXTRACTED TEXT
+  // This is much cheaper on tokens and avoids file upload limits.
+  if (fileText && fileText.trim().length > 50) {
+      console.log('[AI Service] Strategy: Using EXTRACTED TEXT for analysis (Token Efficient).');
+      // Truncate if insanely large (Gemini handles 1M, but let's be safe with 500k chars ~ 125k tokens)
+      const safeText = fileText.substring(0, 500000); 
+      contentParts = [{ text: promptInstructions + `\n\n=== DOCUMENT CONTENT ===\n${safeText}` }];
+  } 
+  // 2. FALLBACK STRATEGY: MULTIMODAL (Only if text failed/is empty AND we have a buffer)
+  else if (buffer && mimeType && (mimeType === 'application/pdf' || mimeType.startsWith('image/'))) {
+      try {
+          console.log('[AI Service] Strategy: Text is empty, falling back to Native Gemini File API (Multimodal).');
+          const fileUri = await uploadToGemini(buffer, mimeType);
+          contentParts = [
+              { fileData: { mimeType, fileUri } },
+              { text: promptInstructions }
+          ];
+      } catch (err) {
+          console.error('[AI Service] Gemini File Upload failed during fallback.', err);
+      }
+  }
+
+  // 3. FINAL FALLBACK: No text, no file upload success
+  if (contentParts.length === 0) {
+       console.log('[AI Service] Error: No content available for analysis (Text empty, File upload failed/skipped).');
+       return {
+           ...DEFAULT_AI_ANALYSIS,
+           summary: 'Document content could not be read. Please upload a clear PDF or Text file.',
+       };
+  }
 
   try {
     const result = await withRetry(() => geminiModel.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        contents: [{ role: 'user', parts: contentParts }],
         generationConfig: {
-            responseMimeType: "application/json", // Force JSON output
+            responseMimeType: "application/json",
             temperature: 0.1,
         }
     }));
 
     const responseText = result.response.text();
-    console.log('[Gemini] Raw Response:', responseText.substring(0, 200) + '...');
+    console.log('[AI Service] Gemini Raw Response:', responseText.substring(0, 200) + '...');
 
     let parsedResult;
     try {
         parsedResult = JSON.parse(responseText);
     } catch (e) {
         console.error('Failed to parse Gemini JSON:', e);
-        // Fallback: try to clean markdown code blocks if present (though responseMimeType should prevent this)
         const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '');
         try {
             parsedResult = JSON.parse(cleanText);
         } catch (e2) {
              return {
                 ...DEFAULT_AI_ANALYSIS,
-                summary: 'AI returned invalid content structure. Please try again.',
+                summary: 'AI returned invalid content structure.',
             };
         }
     }
@@ -147,14 +181,13 @@ const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
         : 'Other',
       confidenceScore: typeof parsedResult.confidenceScore === 'number' ? parsedResult.confidenceScore : 0.5,
       analyzedAt: new Date(),
-      modelVersion: 'gemini-1.5-flash',
+      modelVersion: 'gemini-2.5-pro',
     };
 
     return analysis;
   } catch (error: any) {
     console.error('Gemini AI analysis error:', error);
     
-    // Improve error feedback
     let errorMessage = 'AI analysis encountered an error.';
     if (error.message?.includes('429')) errorMessage = 'Analysis failed due to high traffic (Rate Limit). Please try again in a minute.';
     if (error.message?.includes('SAFETY')) errorMessage = 'Analysis blocked due to safety filters.';
@@ -213,12 +246,8 @@ const extractTextFromDocument = async (
     // 2. PDF Files
     if (mimeType.includes('pdf') || mimeType === 'application/pdf') {
       try {
-        let pdfParseLib = pdfParse;
-        if (typeof pdfParseLib !== 'function' && pdfParseLib.default) {
-            pdfParseLib = pdfParseLib.default;
-        }
-
-        const pdfData = await pdfParseLib(buffer);
+        // pdf-parse is imported with @ts-ignore, cast to any to invoke
+        const pdfData = await (pdfParse as any)(buffer);
         let text = pdfData.text || '';
         
         // Simple heuristic: if text length is very small relative to number of pages, it might be scanned

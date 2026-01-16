@@ -22,10 +22,8 @@ const VALID_CATEGORIES: TDocumentCategory[] = [
 
 // Default/fallback AI analysis result
 const DEFAULT_AI_ANALYSIS: TAiAnalysis = {
-  summary: {
-    refined: 'Unable to analyze document content.',
-    raw: 'Unable to analyze document content.',
-  },
+  summary: 'Unable to analyze document content.',
+  rawSummary: 'Unable to analyze document content.',
   extractedEntities: [],
   documentCategory: 'Other',
   confidenceScore: 0,
@@ -69,10 +67,8 @@ const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
   if (!fileText || fileText.trim().length < 10) {
     return {
       ...DEFAULT_AI_ANALYSIS,
-      summary: {
-        refined: 'Document contains insufficient text for analysis.',
-        raw: 'Document contains insufficient text for analysis.',
-      },
+      summary: 'Document contains insufficient text for analysis.',
+      rawSummary: 'Document contains insufficient text for analysis.',
     };
   }
 
@@ -144,13 +140,11 @@ JSON RESPONSE:`;
     // Validate and sanitize the response
     const summaryText = typeof parsedResult.summary === 'string'
           ? parsedResult.summary.substring(0, 1000)
-          : DEFAULT_AI_ANALYSIS.summary.refined;
+          : DEFAULT_AI_ANALYSIS.summary;
 
     const analysis: TAiAnalysis = {
-      summary: {
-        refined: summaryText,
-        raw: summaryText, 
-      },
+      summary: summaryText,
+      rawSummary: summaryText,
       extractedEntities: Array.isArray(parsedResult.extractedEntities)
         ? parsedResult.extractedEntities
             .filter((e: unknown) => typeof e === 'string')
@@ -177,12 +171,10 @@ JSON RESPONSE:`;
     // Return fallback object instead of throwing
     return {
       ...DEFAULT_AI_ANALYSIS,
-      summary: {
-        refined: error instanceof SyntaxError
+      summary: error instanceof SyntaxError
           ? 'Failed to parse AI response. Document may require manual review.'
           : 'AI analysis encountered an error. Please try again later.',
-        raw: '',
-      },
+      rawSummary: '',
     };
   }
 };
