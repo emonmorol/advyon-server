@@ -6,6 +6,8 @@ import config from '../../config';
 import AppError from '../../errors/appError';
 import { TUser } from './user.interface';
 import { User } from './user.model';
+import { Case } from '../case/case.model';
+import { CaseAccessModel } from '../caseAccess/caseAccess.model';
 import { ClientProfile, JudgeProfile, LawyerProfile } from './profile.model';
 import {
   generateAdminId,
@@ -280,6 +282,50 @@ const changePassword = async (
   return { message: 'Password changed successfully' };
 };
 
+// Phase 2: Get Lawyers Clients
+const getLawyerClients = async (lawyerId: string) => {
+  const user = await User.findOne({ id: lawyerId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Lawyer not found');
+  }
+
+  // Find cases created by this lawyer
+  const cases = await Case.find({ createdBy: user._id });
+  const caseIds = cases.map((c) => c._id);
+
+  // Find users with access to these cases
+  const accesses = await CaseAccessModel.find({
+    caseId: { $in: caseIds },
+  }).populate('userId');
+
+  // Extract unique clients
+  const uniqueClients = new Map<string, any>();
+
+  for (const access of accesses) {
+    const clientUser = access.userId as any; // Populated user
+    if (clientUser && clientUser.role === 'client') {
+      if (!uniqueClients.has(clientUser.id)) {
+        // Fetch client profile for additional details
+        const clientProfile = await ClientProfile.findOne({ userId: clientUser._id });
+        
+        uniqueClients.set(clientUser.id, {
+          id: clientUser.id,
+          fullName: clientUser.fullName,
+          email: clientUser.email,
+          displayName: clientUser.displayName,
+          avatarUrl: clientUser.avatarUrl,
+          phone: clientProfile?.phoneNumber || '',
+          address: clientProfile?.address || '',
+          accessStatus: access.status, // Status in the case
+          caseId: access.caseId, // Just one case reference for now
+        });
+      }
+    }
+  }
+
+  return Array.from(uniqueClients.values());
+};
+
 export const UserServices = {
   createUser,
   getAllUsers,
@@ -291,5 +337,6 @@ export const UserServices = {
   updatePreferences,
   updateMyProfile,
   changePassword,
+  getLawyerClients,
 };
 

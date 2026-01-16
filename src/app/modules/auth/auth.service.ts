@@ -18,7 +18,21 @@ import { generateUserId, getUserWithProfile } from './auth.utils';
  */
 const syncUserFromClerk = async (clerkUserId: string, email: string) => {
   // Check if user already exists
-  const existingUser = await User.findOne({ clerkUserId });
+  let existingUser = await User.findOne({ clerkUserId });
+  
+  if (!existingUser && email) {
+    // Check if user exists by email (legacy user or first time logging in with this email via Clerk)
+    existingUser = await User.findOne({ email });
+    
+    if (existingUser) {
+      // Link Clerk ID to existing user
+      existingUser.clerkUserId = clerkUserId;
+      // If the existing user had a different role or status, we keep it.
+      // But we might want to ensure they have a role if they were in-progress? 
+      // Existing logic implies we just return them.
+    }
+  }
+
   if (existingUser) {
     // Update last login time
     existingUser.lastLoginAt = new Date();
@@ -57,6 +71,23 @@ const syncUserFromClerk = async (clerkUserId: string, email: string) => {
   // Final fallback: create a UNIQUE placeholder to avoid E11000 duplicate key error.
   if (!finalEmail) {
       finalEmail = `guest_${clerkUserId}@advyon.com`.toLowerCase();
+  } else {
+     // Check one last time if email became taken by race condition (optional, but good practice)
+     const emailCheck = await User.findOne({ email: finalEmail });
+     if (emailCheck) {
+        // If we found it now, link and return
+        emailCheck.clerkUserId = clerkUserId;
+        emailCheck.lastLoginAt = new Date();
+        await emailCheck.save();
+        return {
+            id: emailCheck.id,
+            clerkUserId: emailCheck.clerkUserId,
+            email: emailCheck.email,
+            role: emailCheck.role,
+            status: emailCheck.status,
+            needsOnboarding: emailCheck.status === 'in-progress' || !emailCheck.role,
+        };
+     }
   }
 
   const newUser = await User.create({

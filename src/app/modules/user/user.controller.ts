@@ -128,6 +128,18 @@ const changePassword = catchAsync(async (req, res) => {
   });
 });
 
+// Phase 2: Get Lawyer Clients
+const getLawyerClients = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const result = await UserServices.getLawyerClients(userId);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Clients retrieved successfully',
+    data: result,
+  });
+});
+
 export const UserControllers = {
   createUser,
   getAllUsers,
@@ -139,5 +151,6 @@ export const UserControllers = {
   updateMyPreferences,
   updateMyProfile,
   changePassword,
+  getLawyerClients,
 };
 

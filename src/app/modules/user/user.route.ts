@@ -67,6 +67,23 @@ router.get(
 
 /**
  * @swagger
+ * /users/my-clients:
+ *   get:
+ *     summary: Get my clients (Lawyer only)
+ *     description: Retrieves a list of clients associated with the logged-in lawyer's cases.
+ *     tags: [Users]
+ *     responses:
+ *       200:
+ *         description: Clients retrieved successfully
+ */
+router.get(
+  '/my-clients',
+  auth('lawyer'),
+  UserControllers.getLawyerClients,
+);
+
+/**
+ * @swagger
  * /users/me/profile:
  *   patch:
  *     summary: Update my profile
