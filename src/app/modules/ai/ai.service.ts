@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 import mammoth from 'mammoth';
-import { groqClient, AI_MODEL } from '../../config/groq.config';
+import { groqClient, AI_MODEL as GROQ_MODEL } from '../../config/groq.config'; // Renamed import
+import { geminiModel } from '../../config/gemini.config'; // New import
 import { TAiAnalysis, TDocumentCategory } from '../document/document.interface';
 
 // pdf-parse doesn't have proper ES module exports, use require
@@ -34,7 +35,7 @@ const DEFAULT_AI_ANALYSIS: TAiAnalysis = {
   documentCategory: 'Other',
   confidenceScore: 0,
   analyzedAt: new Date(),
-  modelVersion: AI_MODEL,
+  modelVersion: 'gemini-1.5-flash',
 };
 
 
@@ -55,6 +56,9 @@ const withRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 1000): Pr
 /**
  * Analyze a legal document using Groq (Llama 3)
  */
+/**
+ * Analyze a legal document using Google Gemini (1.5 Flash)
+ */
 const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
   // Handle scanned PDF detection
   if (fileText === 'SCANNED_PDF_DETECTED') {
@@ -74,12 +78,10 @@ const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
     };
   }
 
-  // Truncate very long documents
-  const truncatedText =
-    fileText.length > 25000 ? fileText.substring(0, 25000) + '...' : fileText;
-
   // Use JSON Schema for structured output
-  const systemPrompt = `You are an expert legal aide. Analyze the provided legal document text and output structured JSON.
+  // Gemini supports JSON mode natively, but requires specific prompting or configuration.
+  // 1.5 Flash is good at following constraints.
+  const prompt = `You are an expert legal aide. Analyze the provided legal document text and output structured JSON.
   
   You must strictly follow this JSON schema:
   {
@@ -94,31 +96,40 @@ const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
   }
 
   If the document is too short or unclear, give a low confidence score but still try to categorize it.
+  
+  DOCUMENT TEXT:
+  ${fileText.substring(0, 900000)} 
+  // Gemini Flash has 1M context, so we can send a lot more text than Grok. 
+  // Safety cap at 900k chars to be safe.
   `;
 
   try {
-    const completion = await withRetry(() => groqClient.chat.completions.create({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `DOCUMENT TEXT:\n${truncatedText}` },
-      ],
-      model: AI_MODEL,
-      temperature: 0.1,
-      response_format: { type: 'json_object' },
+    const result = await withRetry(() => geminiModel.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+            responseMimeType: "application/json", // Force JSON output
+            temperature: 0.1,
+        }
     }));
 
-    const responseText = completion.choices[0]?.message?.content || '{}';
-    console.log('[Groq] Raw Response:', responseText.substring(0, 200) + '...');
+    const responseText = result.response.text();
+    console.log('[Gemini] Raw Response:', responseText.substring(0, 200) + '...');
 
     let parsedResult;
     try {
         parsedResult = JSON.parse(responseText);
     } catch (e) {
-        console.error('Failed to parse AI response as JSON:', e);
-        return {
-            ...DEFAULT_AI_ANALYSIS,
-            summary: 'AI returned invalid content. Please try again.',
-        };
+        console.error('Failed to parse Gemini JSON:', e);
+        // Fallback: try to clean markdown code blocks if present (though responseMimeType should prevent this)
+        const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '');
+        try {
+            parsedResult = JSON.parse(cleanText);
+        } catch (e2) {
+             return {
+                ...DEFAULT_AI_ANALYSIS,
+                summary: 'AI returned invalid content structure. Please try again.',
+            };
+        }
     }
 
     // Validate and sanitize
@@ -136,15 +147,21 @@ const analyzeLegalDocument = async (fileText: string): Promise<TAiAnalysis> => {
         : 'Other',
       confidenceScore: typeof parsedResult.confidenceScore === 'number' ? parsedResult.confidenceScore : 0.5,
       analyzedAt: new Date(),
-      modelVersion: AI_MODEL,
+      modelVersion: 'gemini-1.5-flash',
     };
 
     return analysis;
-  } catch (error) {
-    console.error('Groq AI analysis error:', error);
+  } catch (error: any) {
+    console.error('Gemini AI analysis error:', error);
+    
+    // Improve error feedback
+    let errorMessage = 'AI analysis encountered an error.';
+    if (error.message?.includes('429')) errorMessage = 'Analysis failed due to high traffic (Rate Limit). Please try again in a minute.';
+    if (error.message?.includes('SAFETY')) errorMessage = 'Analysis blocked due to safety filters.';
+
     return {
       ...DEFAULT_AI_ANALYSIS,
-      summary: 'AI analysis encountered an error. Please try again.',
+      summary: `${errorMessage} (Details: ${error.message})`,
     };
   }
 };
@@ -170,7 +187,7 @@ const chatWithAI = async (message: string, context: string, history: any[] = [])
 
     const completion = await withRetry(() => groqClient.chat.completions.create({
       messages: messages as any,
-      model: AI_MODEL,
+      model: GROQ_MODEL,
     }));
 
     return completion.choices[0]?.message?.content || "I couldn't generate a response.";
