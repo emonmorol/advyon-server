@@ -13,6 +13,38 @@ const router = express.Router();
 
 /**
  * @swagger
+ * /ai-insights/me:
+ *   get:
+ *     summary: Get my AI insights
+ *     description: Retrieves AI insights for the logged-in user's cases
+ *     tags: [Insights]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 5
+ *     responses:
+ *       200:
+ *         description: User's insights retrieved
+ */
+router.get('/me', auth(), InsightController.getMyInsights);
+
+/**
+ * @swagger
+ * /ai-insights/dashboard/summary:
+ *   get:
+ *     summary: Get dashboard AI summary
+ *     description: Retrieves AI-powered dashboard summary with stats and tips
+ *     tags: [Insights]
+ *     responses:
+ *       200:
+ *         description: Dashboard summary retrieved
+ */
+router.get('/dashboard/summary', auth(), InsightController.getDashboardSummary);
+
+/**
+ * @swagger
  * /ai-insights/recent:
  *   get:
  *     summary: Get recent insights
@@ -27,3 +59,4 @@ const router = express.Router();
 router.get('/recent', auth('admin', 'superAdmin', 'lawyer'), InsightController.getRecentInsights);
 
 export const InsightRoutes = router;
+
