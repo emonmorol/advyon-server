@@ -1,29 +1,13 @@
 import express from 'express';
-import { CommunityControllers } from './community.controller';
+import { CommunityController } from './community.controller';
 import auth from '../../middlewares/auth';
 
 const router = express.Router();
 
-/**
- * @swagger
- * tags:
- *   name: Community
- *   description: Community threads and discussions
- */
-
-/**
- * @swagger
- * /community/threads:
- *   get:
- *     summary: Get community threads
- *     description: Retrieves a list of community threads.
- *     tags: [Community]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: List of threads
- */
-router.get('/threads', auth(), CommunityControllers.getThreads);
+router.post('/threads', auth('client', 'lawyer', 'admin'), CommunityController.createThread);
+router.get('/threads', CommunityController.getAllThreads);
+router.get('/threads/:id', CommunityController.getThreadById);
+router.post('/threads/:threadId/reply', auth('client', 'lawyer', 'admin'), CommunityController.addReply);
+router.patch('/threads/:id/vote', auth('client', 'lawyer', 'admin'), CommunityController.voteThread);
 
 export const CommunityRoutes = router;
