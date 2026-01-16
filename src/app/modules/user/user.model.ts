@@ -76,6 +76,28 @@ const userSchema = new Schema<TUser, UserModel>(
     deletedAt: {
       type: Date,
     },
+    // Phase 1.1: User Preferences Schema
+    preferences: {
+      theme: {
+        type: String,
+        enum: ['light', 'dark', 'system'],
+        default: 'system',
+      },
+      notifications: {
+        emailDigest: { type: Boolean, default: true },
+        pushAlerts: { type: Boolean, default: false },
+        hearingReminders: { type: Boolean, default: true },
+      },
+      dashboardConfig: {
+        showActivityFeed: { type: Boolean, default: true },
+        showAIInsights: { type: Boolean, default: true },
+        defaultView: {
+          type: String,
+          enum: ['classic', 'kanban'],
+          default: 'classic',
+        },
+      },
+    },
   },
   {
     timestamps: true,

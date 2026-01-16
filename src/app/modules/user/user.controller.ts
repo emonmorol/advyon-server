@@ -68,6 +68,30 @@ const getMyProfile = catchAsync(async (req, res) => {
   });
 });
 
+// Phase 1.1: Get My Preferences
+const getMyPreferences = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const result = await UserServices.getPreferences(userId);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'User preferences retrieved successfully',
+    data: result,
+  });
+});
+
+// Phase 1.1: Update My Preferences
+const updateMyPreferences = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const result = await UserServices.updatePreferences(userId, req.body);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'User preferences updated successfully',
+    data: result,
+  });
+});
+
 export const UserControllers = {
   createUser,
   getAllUsers,
@@ -75,4 +99,6 @@ export const UserControllers = {
   updateUser,
   deleteUser,
   getMyProfile,
+  getMyPreferences,
+  updateMyPreferences,
 };

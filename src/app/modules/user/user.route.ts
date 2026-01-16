@@ -2,7 +2,6 @@
 import express from 'express';
 import auth from '../../middlewares/auth';
 import validateRequest from '../../middlewares/validateRequest';
-import auth from '../../middlewares/auth';
 import { UserControllers } from './user.controller';
 import { UserValidation } from './user.validation';
 
@@ -68,6 +67,54 @@ router.get(
 
 /**
  * @swagger
+ * /users/me/preferences:
+ *   get:
+ *     summary: Get my preferences
+ *     description: Retrieves user preferences (theme, notifications, dashboard config)
+ *     tags: [Users]
+ *     responses:
+ *       200:
+ *         description: Preferences retrieved successfully
+ */
+router.get(
+  '/me/preferences',
+  auth(),
+  UserControllers.getMyPreferences,
+);
+
+/**
+ * @swagger
+ * /users/me/preferences:
+ *   patch:
+ *     summary: Update my preferences
+ *     description: Updates user preferences (theme, notifications, dashboard config)
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               theme:
+ *                 type: string
+ *                 enum: [light, dark, system]
+ *               notifications:
+ *                 type: object
+ *               dashboardConfig:
+ *                 type: object
+ *     responses:
+ *       200:
+ *         description: Preferences updated successfully
+ */
+router.patch(
+  '/me/preferences',
+  auth(),
+  UserControllers.updateMyPreferences,
+);
+
+/**
+ * @swagger
  * /users:
  *   get:
  *     summary: Get all users
@@ -77,12 +124,6 @@ router.get(
  *       200:
  *         description: List of users retrieved successfully
  */
-router.get(
-  '/me/profile',
-  auth(),
-  UserControllers.getMyProfile,
-);
-
 router.get(
   '/',
   UserControllers.getAllUsers,

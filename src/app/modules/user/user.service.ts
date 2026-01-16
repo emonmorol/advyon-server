@@ -153,6 +153,61 @@ const getMyProfile = async (userId: string) => {
   return profile;
 };
 
+// Phase 1.1: Get User Preferences
+const getPreferences = async (userId: string) => {
+  const user = await User.findOne({ id: userId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+  
+  // Return preferences with defaults if not set
+  return user.preferences || {
+    theme: 'system',
+    notifications: {
+      emailDigest: true,
+      pushAlerts: false,
+      hearingReminders: true,
+    },
+    dashboardConfig: {
+      showActivityFeed: true,
+      showAIInsights: true,
+      defaultView: 'classic',
+    },
+  };
+};
+
+// Phase 1.1: Update User Preferences
+const updatePreferences = async (userId: string, preferences: any) => {
+  const user = await User.findOne({ id: userId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+  
+  // Merge existing preferences with new ones (deep merge)
+  const currentPrefs = user.preferences as any || {};
+  const mergedPreferences = {
+    theme: preferences.theme ?? currentPrefs.theme ?? 'system',
+    notifications: {
+      emailDigest: preferences.notifications?.emailDigest ?? currentPrefs.notifications?.emailDigest ?? true,
+      pushAlerts: preferences.notifications?.pushAlerts ?? currentPrefs.notifications?.pushAlerts ?? false,
+      hearingReminders: preferences.notifications?.hearingReminders ?? currentPrefs.notifications?.hearingReminders ?? true,
+    },
+    dashboardConfig: {
+      showActivityFeed: preferences.dashboardConfig?.showActivityFeed ?? currentPrefs.dashboardConfig?.showActivityFeed ?? true,
+      showAIInsights: preferences.dashboardConfig?.showAIInsights ?? currentPrefs.dashboardConfig?.showAIInsights ?? true,
+      defaultView: preferences.dashboardConfig?.defaultView ?? currentPrefs.dashboardConfig?.defaultView ?? 'classic',
+    },
+  };
+  
+  const result = await User.findOneAndUpdate(
+    { id: userId },
+    { preferences: mergedPreferences },
+    { new: true }
+  );
+  
+  return result?.preferences;
+};
+
 export const UserServices = {
   createUser,
   getAllUsers,
@@ -160,4 +215,6 @@ export const UserServices = {
   updateUser,
   deleteUser,
   getMyProfile,
+  getPreferences,
+  updatePreferences,
 };
