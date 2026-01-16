@@ -23,6 +23,8 @@ const threadSchema = new Schema<TThread>({
     views: { type: Number, default: 0 },
     upvotes: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     downvotes: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    upvotesCount: { type: Number, default: 0 },
+    repliesCount: { type: Number, default: 0 },
     isSolved: { type: Boolean, default: false },
 }, {
     timestamps: true,

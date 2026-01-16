@@ -25,7 +25,8 @@ export interface TThread {
     upvotes: Types.ObjectId[];
     downvotes: Types.ObjectId[];
     isSolved: boolean;
-    repliesCount?: number;
+    upvotesCount: number;
+    repliesCount: number;
     createdAt?: Date;
     updatedAt?: Date;
 }

@@ -18,23 +18,160 @@ const createThread = async (payload: TThread & { author: string }) => {
 };
 
 const getAllThreads = async (query: Record<string, unknown>) => {
-  const threadQuery = new QueryBuilder(Thread.find().populate('author', 'fullName role avatarUrl'), query)
-    .search(['title', 'content', 'tags'])
-    .filter()
-    .sort()
-    .paginate()
-    .fields();
+  // Build aggregation pipeline for dynamic counts
+  const pipeline: any[] = [];
 
-  const result = await threadQuery.modelQuery;
-  const meta = await threadQuery.countTotal();
+  // Add computed fields for sorting
+  pipeline.push({
+    $addFields: {
+      upvotesCount: { $size: { $ifNull: ['$upvotes', []] } },
+      downvotesCount: { $size: { $ifNull: ['$downvotes', []] } },
+    }
+  });
 
-  // For each thread, get reply count
-  const threadsWithCounts = await Promise.all(result.map(async (thread: any) => {
-    const repliesCount = await Reply.countDocuments({ threadId: thread._id });
-    return { ...thread.toObject(), repliesCount };
-  }));
+  // Search filter
+  if (query.searchTerm) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { title: { $regex: query.searchTerm, $options: 'i' } },
+          { content: { $regex: query.searchTerm, $options: 'i' } },
+          { tags: { $regex: query.searchTerm, $options: 'i' } }
+        ]
+      }
+    });
+  }
 
-  return { meta, result: threadsWithCounts };
+  // Category filter
+  if (query.category) {
+    pipeline.push({ $match: { category: query.category } });
+  }
+
+  // Unanswered filter (repliesCount = 0)
+  if (query.repliesCount !== undefined) {
+    // Need to lookup replies count
+    pipeline.push({
+      $lookup: {
+        from: 'replies',
+        localField: '_id',
+        foreignField: 'threadId',
+        as: 'repliesArray'
+      }
+    });
+    pipeline.push({
+      $addFields: {
+        repliesCount: { $size: '$repliesArray' }
+      }
+    });
+    pipeline.push({
+      $match: { repliesCount: Number(query.repliesCount) }
+    });
+  } else {
+    // Always add repliesCount for display
+    pipeline.push({
+      $lookup: {
+        from: 'replies',
+        localField: '_id',
+        foreignField: 'threadId',
+        as: 'repliesArray'
+      }
+    });
+    pipeline.push({
+      $addFields: {
+        repliesCount: { $size: '$repliesArray' }
+      }
+    });
+  }
+
+  // Remove the temp array
+  pipeline.push({
+    $project: {
+      repliesArray: 0
+    }
+  });
+
+  // Sort
+  const sortField = (query.sort as string) || '-createdAt';
+  const sortOrder = sortField.startsWith('-') ? -1 : 1;
+  const sortKey = sortField.replace(/^-/, '');
+  pipeline.push({ $sort: { [sortKey]: sortOrder } });
+
+  // Pagination
+  const page = Number(query.page) || 1;
+  const limit = Number(query.limit) || 10;
+  const skip = (page - 1) * limit;
+  pipeline.push({ $skip: skip });
+  pipeline.push({ $limit: limit });
+
+  // Populate author
+  pipeline.push({
+    $lookup: {
+      from: 'users',
+      localField: 'author',
+      foreignField: '_id',
+      as: 'authorData'
+    }
+  });
+  pipeline.push({
+    $addFields: {
+      author: { $arrayElemAt: ['$authorData', 0] }
+    }
+  });
+  pipeline.push({
+    $project: {
+      authorData: 0,
+      'author.password': 0,
+      'author.__v': 0
+    }
+  });
+
+  const result = await Thread.aggregate(pipeline);
+
+  // Get total count for pagination
+  const countPipeline: any[] = [];
+  if (query.searchTerm) {
+    countPipeline.push({
+      $match: {
+        $or: [
+          { title: { $regex: query.searchTerm, $options: 'i' } },
+          { content: { $regex: query.searchTerm, $options: 'i' } },
+          { tags: { $regex: query.searchTerm, $options: 'i' } }
+        ]
+      }
+    });
+  }
+  if (query.category) {
+    countPipeline.push({ $match: { category: query.category } });
+  }
+  if (query.repliesCount !== undefined) {
+    countPipeline.push({
+      $lookup: {
+        from: 'replies',
+        localField: '_id',
+        foreignField: 'threadId',
+        as: 'repliesArray'
+      }
+    });
+    countPipeline.push({
+      $addFields: { repliesCount: { $size: '$repliesArray' } }
+    });
+    countPipeline.push({
+      $match: { repliesCount: Number(query.repliesCount) }
+    });
+  }
+  countPipeline.push({ $count: 'total' });
+
+  const countResult = await Thread.aggregate(countPipeline);
+  const total = countResult[0]?.total || 0;
+
+  const meta = {
+    page,
+    limit,
+    total,
+    totalPage: Math.ceil(total / limit)
+  };
+
+  return { meta, result };
 };
 
 const getThreadById = async (id: string) => {
@@ -51,6 +188,10 @@ const addReply = async (payload: TReply & { author: string }) => {
   // Convert custom user id to MongoDB ObjectId
   const authorObjectId = await getUserObjectId(payload.author as any);
   const result = await Reply.create({ ...payload, author: authorObjectId });
+
+  // Increment replies count on thread
+  await Thread.findByIdAndUpdate(payload.threadId, { $inc: { repliesCount: 1 } });
+
   return result;
 };
 
@@ -92,6 +233,8 @@ const voteThread = async (threadId: string, userId: string, direction: 'up' | 'd
     thread.downvotes.push(userObjectId as any);
   }
 
+  // Update upvotesCount
+  thread.upvotesCount = thread.upvotes.length;
   await thread.save();
   return thread;
 }
@@ -163,9 +306,9 @@ const getCommunityStats = async () => {
   const totalThreads = await Thread.countDocuments();
   const totalReplies = await Reply.countDocuments();
 
-  // Count unique authors from threads in last 30 days
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const activeUsers = await Thread.distinct('author', { createdAt: { $gte: thirtyDaysAgo } });
+  // Count active users (logged in within last 24 hours)
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const activeUsers = await User.countDocuments({ lastLoginAt: { $gte: oneDayAgo } });
 
   // Count threads created today
   const today = new Date();
@@ -175,7 +318,7 @@ const getCommunityStats = async () => {
   return {
     totalThreads,
     totalReplies,
-    activeUsers: activeUsers.length,
+    activeUsers,
     dailyQuestions,
   };
 }
