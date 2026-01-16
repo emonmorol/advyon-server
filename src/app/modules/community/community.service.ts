@@ -323,6 +323,35 @@ const getCommunityStats = async () => {
   };
 }
 
+const getTrendingTopics = async (limit: number = 10) => {
+  // Aggregate tags from all threads and count occurrences
+  const result = await Thread.aggregate([
+    // Unwind the tags array
+    { $unwind: '$tags' },
+    // Group by tag name and count
+    {
+      $group: {
+        _id: '$tags',
+        count: { $sum: 1 }
+      }
+    },
+    // Sort by count descending
+    { $sort: { count: -1 } },
+    // Limit results
+    { $limit: limit },
+    // Rename _id to name
+    {
+      $project: {
+        _id: 0,
+        name: '$_id',
+        count: 1
+      }
+    }
+  ]);
+
+  return result;
+}
+
 export const CommunityService = {
   createThread,
   getAllThreads,
@@ -332,4 +361,5 @@ export const CommunityService = {
   voteReply,
   markAsSolved,
   getCommunityStats,
+  getTrendingTopics,
 };

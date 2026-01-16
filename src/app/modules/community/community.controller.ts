@@ -86,6 +86,17 @@ const getCommunityStats = catchAsync(async (req, res) => {
   })
 })
 
+const getTrendingTopics = catchAsync(async (req, res) => {
+  const limit = Number(req.query.limit) || 10;
+  const result = await CommunityService.getTrendingTopics(limit);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Trending topics retrieved',
+    data: result
+  })
+})
+
 export const CommunityController = {
   createThread,
   getAllThreads,
@@ -95,4 +106,5 @@ export const CommunityController = {
   voteReply,
   markAsSolved,
   getCommunityStats,
+  getTrendingTopics,
 };

@@ -7,6 +7,9 @@ const router = express.Router();
 // Stats endpoint (public)
 router.get('/stats', CommunityController.getCommunityStats);
 
+// Trending topics endpoint (public)
+router.get('/trending-topics', CommunityController.getTrendingTopics);
+
 // Thread routes
 router.post('/threads', auth('client', 'lawyer', 'admin'), CommunityController.createThread);
 router.get('/threads', CommunityController.getAllThreads);
