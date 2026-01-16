@@ -12,7 +12,7 @@ const auth = (...requiredRoles: TUserRole[]) => {
   return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
 
-    console.log('authHeader',authHeader);
+    // console.log('authHeader',authHeader);
     
     // Check if authorization header exists
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -81,8 +81,8 @@ const auth = (...requiredRoles: TUserRole[]) => {
       }
 
       // Check role-based access
-      console.log('requiredRoles.length',requiredRoles.length);
-      console.log('user',user);
+      // console.log('requiredRoles.length',requiredRoles.length);
+      // console.log('user',user);
       
       if (
         requiredRoles.length > 0 &&

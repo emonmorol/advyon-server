@@ -8,6 +8,7 @@ import { generateCaseId } from './case.utils';
 import { DEFAULT_CASE_FOLDERS } from './case.constant';
 import { ActivityService } from '../activity/activity.service';
 import { CaseAccessModel } from '../caseAccess/caseAccess.model';
+import { DocumentModel } from '../document/document.model';
 
 /**
  * Create a new case
@@ -141,7 +142,14 @@ const getCaseById = async (caseId: string, userId: string) => {
     throw new AppError(httpStatus.FORBIDDEN, 'You are not authorized to access this case');
   }
 
-  return caseData;
+  // Fetch documents for the case
+  const documents = await DocumentModel.find({ caseId: caseData._id })
+    .populate('uploadedBy', 'id fullName email')
+    .sort({ uploadedAt: -1 });
+
+  // Convert mongoose doc to object and attach documents
+  const caseObj = caseData.toObject();
+  return { ...caseObj, documents };
 };
 
 /**

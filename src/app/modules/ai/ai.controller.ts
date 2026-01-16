@@ -6,29 +6,31 @@ import { DocumentModel } from '../document/document.model';
 import { Case as CaseModel } from '../case/case.model';
 
 const chatWithAI = catchAsync(async (req: Request, res: Response) => {
-  const { message, documentId, caseId, history } = req.body;
+  const { message, documentId, documentIds, caseId, history } = req.body;
 
   let context = '';
 
-  // 1. Document Context (Most Specific)
-  if (documentId) {
-    const document = await DocumentModel.findOne({ id: documentId });
-    if (document) {
-      context += `
-      FOCUS DOCUMENT:
-      Title: ${document.fileName}
-      Type: ${document.fileType}
-      Summary: ${document.aiAnalysis?.summary || 'No summary available'}
-      Key Points: ${document.aiAnalysis?.keyPoints?.join('\n') || 'None'}
-      Category: ${document.aiAnalysis?.documentCategory || 'Unknown'}
-      `;
+  // 1. Document Context (Single or Multiple)
+  const targetDocIds = [];
+  if (Array.isArray(documentIds) && documentIds.length > 0) {
+      targetDocIds.push(...documentIds);
+  } else if (documentId) {
+      targetDocIds.push(documentId);
+  }
 
-      // Also try to get the parent case for broader context if not already provided or implied
-      if (!caseId) {
-          // If document has a case reference, we could fetch it here if needed.
-          // For now, we rely on the frontend passing caseId if known, or we just stick to document context.
-      }
-    }
+  if (targetDocIds.length > 0) {
+      const documents = await DocumentModel.find({ id: { $in: targetDocIds } });
+      
+      documents.forEach(document => {
+          context += `
+          FOCUS DOCUMENT:
+          Title: ${document.fileName}
+          Type: ${document.fileType}
+          Summary: ${document.aiAnalysis?.summary || 'No summary available'}
+          Key Points: ${document.aiAnalysis?.keyPoints?.join('\n') || 'None'}
+          Category: ${document.aiAnalysis?.documentCategory || 'Unknown'}
+          `;
+      });
   }
 
   // 2. Case Context (Mid Level) - appended to document context or stands alone

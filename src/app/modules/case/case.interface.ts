@@ -1,6 +1,7 @@
 /* eslint-disable no-unused-vars */
 
 import { Document, Types } from 'mongoose';
+import { TDocument } from '../document/document.interface';
 
 // Case status enum
 export type TCaseStatus = 'active' | 'pending' | 'review' | 'closed';
@@ -30,7 +31,9 @@ export interface TCase extends Document {
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
+
   updatedAt: Date;
+  documents?: TDocument[];
 }
 
 // Create case payload
