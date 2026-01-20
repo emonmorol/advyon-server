@@ -6,7 +6,6 @@ import os from 'os';
 // @ts-ignore
 import pdfParse from 'pdf-parse'; // Use ES import with interop
 import { groqClient, AI_MODEL as GROQ_MODEL } from '../../config/groq.config';
-import { geminiModel, fileManager } from '../../config/gemini.config';
 import { TAiAnalysis, TDocumentCategory } from '../document/document.interface';
 
 // Valid document categories
@@ -37,7 +36,7 @@ const DEFAULT_AI_ANALYSIS: TAiAnalysis = {
   documentCategory: 'Other',
   confidenceScore: 0,
   analyzedAt: new Date(),
-  modelVersion: 'gemini-2.5-pro',
+  modelVersion: 'llama-3-8b-8192',
 };
 
 // Helper for retry logic
@@ -55,34 +54,8 @@ const withRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 1000): Pr
 };
 
 /**
- * Upload buffer to Gemini File API
- * @deprecated Use only as fallback for purely visual documents to save quota.
- */
-const uploadToGemini = async (buffer: Buffer, mimeType: string): Promise<string> => {
-    const tempFilePath = path.join(os.tmpdir(), `gemini_upload_${Date.now()}.${mimeType.split('/')[1]}`);
-    try {
-        fs.writeFileSync(tempFilePath, buffer as any); // Cast to any/Uint8Array to satisfy fs types
-        
-        const uploadResponse = await fileManager.uploadFile(tempFilePath, {
-            mimeType,
-            displayName: "Legal Document Analysis"
-        });
-
-        console.log(`[AI Service] Uploaded to Gemini: ${uploadResponse.file.uri}`);
-        return uploadResponse.file.uri;
-    } catch (error) {
-        console.error("Failed to upload to Gemini:", error);
-        throw error;
-    } finally {
-        if (fs.existsSync(tempFilePath)) {
-            fs.unlinkSync(tempFilePath);
-        }
-    }
-}
-
-/**
- * Analyze a legal document using Google Gemini (1.5 Flash)
- * IMPL STRATEGY: Text-First to save tokens and avoid Rate Limits.
+ * Analyze a legal document using Groq (Llama 3)
+ * IMPL STRATEGY: Text-Only Analysis (Free/Fast)
  */
 const analyzeLegalDocument = async (fileText: string, buffer?: Buffer, mimeType?: string): Promise<TAiAnalysis> => {
   console.log(`[AI Service] Starting Legal Document Analysis. Input text length: ${fileText?.length || 0}`);
@@ -103,67 +76,43 @@ const analyzeLegalDocument = async (fileText: string, buffer?: Buffer, mimeType?
   }
 
   If the document is too short or unclear, give a low confidence score but still try to categorize it.
+  
+  DOCUMENT CONTENT:
+  ${fileText?.substring(0, 100000) || ''}
   `;
 
-  let contentParts: any[] = [];
-  
-  // 1. PRIMARY STRATEGY: USE EXTRACTED TEXT
-  // This is much cheaper on tokens and avoids file upload limits.
-  if (fileText && fileText.trim().length > 50) {
-      console.log('[AI Service] Strategy: Using EXTRACTED TEXT for analysis (Token Efficient).');
-      // Truncate if insanely large (Gemini handles 1M, but let's be safe with 500k chars ~ 125k tokens)
-      const safeText = fileText.substring(0, 500000); 
-      contentParts = [{ text: promptInstructions + `\n\n=== DOCUMENT CONTENT ===\n${safeText}` }];
-  } 
-  // 2. FALLBACK STRATEGY: MULTIMODAL (Only if text failed/is empty AND we have a buffer)
-  else if (buffer && mimeType && (mimeType === 'application/pdf' || mimeType.startsWith('image/'))) {
-      try {
-          console.log('[AI Service] Strategy: Text is empty, falling back to Native Gemini File API (Multimodal).');
-          const fileUri = await uploadToGemini(buffer, mimeType);
-          contentParts = [
-              { fileData: { mimeType, fileUri } },
-              { text: promptInstructions }
-          ];
-      } catch (err) {
-          console.error('[AI Service] Gemini File Upload failed during fallback.', err);
-      }
-  }
-
-  // 3. FINAL FALLBACK: No text, no file upload success
-  if (contentParts.length === 0) {
-       console.log('[AI Service] Error: No content available for analysis (Text empty, File upload failed/skipped).');
+  if (!fileText || fileText.length < 50) {
+       console.log('[AI Service] Error: No content available for analysis.');
        return {
            ...DEFAULT_AI_ANALYSIS,
-           summary: 'Document content could not be read. Please upload a clear PDF or Text file.',
+           summary: 'Document content is empty or unreadable. Please upload a clear text PDF or Image.',
+           confidenceScore: 0
        };
   }
 
   try {
-    const result = await withRetry(() => geminiModel.generateContent({
-        contents: [{ role: 'user', parts: contentParts }],
-        generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.1,
-        }
+    const completion = await withRetry(() => groqClient.chat.completions.create({
+        messages: [
+            { role: 'system', content: 'You are a legal document analyzer. Output JSON only.' },
+            { role: 'user', content: promptInstructions }
+        ],
+        model: GROQ_MODEL,
+        temperature: 0.1,
+        response_format: { type: 'json_object' }
     }));
 
-    const responseText = result.response.text();
-    console.log('[AI Service] Gemini Raw Response:', responseText.substring(0, 200) + '...');
+    const responseText = completion.choices[0]?.message?.content || '{}';
+    console.log('[AI Service] Groq Raw Response:', responseText.substring(0, 200) + '...');
 
     let parsedResult;
     try {
         parsedResult = JSON.parse(responseText);
     } catch (e) {
-        console.error('Failed to parse Gemini JSON:', e);
-        const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '');
-        try {
-            parsedResult = JSON.parse(cleanText);
-        } catch (e2) {
-             return {
-                ...DEFAULT_AI_ANALYSIS,
-                summary: 'AI returned invalid content structure.',
-            };
-        }
+        console.error('Failed to parse Groq JSON:', e);
+        return {
+           ...DEFAULT_AI_ANALYSIS,
+           summary: 'AI returned invalid content structure.',
+        };
     }
 
     // Validate and sanitize
@@ -181,20 +130,15 @@ const analyzeLegalDocument = async (fileText: string, buffer?: Buffer, mimeType?
         : 'Other',
       confidenceScore: typeof parsedResult.confidenceScore === 'number' ? parsedResult.confidenceScore : 0.5,
       analyzedAt: new Date(),
-      modelVersion: 'gemini-2.5-pro',
+      modelVersion: GROQ_MODEL,
     };
 
     return analysis;
   } catch (error: any) {
-    console.error('Gemini AI analysis error:', error);
-    
-    let errorMessage = 'AI analysis encountered an error.';
-    if (error.message?.includes('429')) errorMessage = 'Analysis failed due to high traffic (Rate Limit). Please try again in a minute.';
-    if (error.message?.includes('SAFETY')) errorMessage = 'Analysis blocked due to safety filters.';
-
+    console.error('Groq AI analysis error:', error);
     return {
       ...DEFAULT_AI_ANALYSIS,
-      summary: `${errorMessage} (Details: ${error.message})`,
+      summary: `Analysis failed: ${error.message}`,
     };
   }
 };
@@ -250,9 +194,6 @@ const extractTextFromDocument = async (
         const pdfData = await (pdfParse as any)(buffer);
         let text = pdfData.text || '';
         
-        // Simple heuristic: if text length is very small relative to number of pages, it might be scanned
-        // But pdf-parse often returns enough whitespace/newline that length check can be tricky.
-        // Better check: is there any alphanumeric content?
         const alphaNumericCount = (text.match(/[a-zA-Z0-9]/g) || []).length;
         
         if (alphaNumericCount < 50 && buffer.length > 5000) {
