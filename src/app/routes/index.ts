@@ -15,6 +15,7 @@ import { AIRoutes } from '../modules/ai/ai.route';
 import { LegalRoutes } from '../modules/legal/legal.route';
 import { MessageRoutes } from '../modules/message/message.route';
 import { CommunityRoutes } from '../modules/community/community.route';
+import { ScheduleRoutes } from '../modules/schedule/schedule.route';
 
 const router = Router();
 
@@ -22,6 +23,10 @@ const moduleRoutes = [
   {
     path: '/auth',
     route: AuthRoutes,
+  },
+  {
+    path: '/schedules',
+    route: ScheduleRoutes,
   },
   {
     path: '/users',

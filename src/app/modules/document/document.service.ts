@@ -372,6 +372,50 @@ const updateDocumentSummary = async (documentId: string, summary: string) => {
   return document;
 };
 
+/**
+ * Phase 3.1: Auto-file document based on AI analysis
+ */
+const autoFileDocument = async (documentId: string): Promise<void> => {
+  const doc = await DocumentModel.findOne({ id: documentId });
+  if (!doc) throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+
+  const analysis = doc.aiAnalysis;
+  
+  if (analysis?.documentCategory && analysis?.confidenceScore > 0.85) {
+    const originalFolder = doc.folderName;
+    const targetFolder = analysis.documentCategory; // e.g., "Evidence", "Pleadings"
+    
+    // Update folder and auto-filing status
+    doc.folderName = targetFolder;
+    doc.autoFiling = {
+      status: 'moved',
+      originalFolder,
+      targetFolder,
+      confidenceScore: analysis.confidenceScore,
+      movedAt: new Date()
+    };
+    await doc.save();
+    
+    // Log activity
+    await ActivityService.logActivity({
+      type: 'document_moved',
+      message: `Auto-filed document ${doc.fileName} from ${originalFolder} to ${targetFolder}`,
+      userId: doc.uploadedBy,
+      caseId: doc.caseId,
+      documentId: doc._id as any
+    });
+  } else {
+    doc.autoFiling = {
+      status: 'pending',
+      originalFolder: doc.folderName,
+      targetFolder: '',
+      confidenceScore: analysis?.confidenceScore || 0,
+      movedAt: new Date(),
+    };
+    await doc.save();
+  }
+};
+
 export const DocumentServices = {
   uploadDocument,
   getDocumentsByCase,
@@ -381,4 +425,5 @@ export const DocumentServices = {
   updateCloudinaryDetails,
   getDocumentContent,
   updateDocumentSummary,
+  autoFileDocument,
 };
