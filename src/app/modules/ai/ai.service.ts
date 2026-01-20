@@ -3,8 +3,8 @@ import mammoth from 'mammoth';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-// @ts-ignore
-import pdfParse from 'pdf-parse'; // Use ES import with interop
+// pdf-parse is a CommonJS module - must use require
+const pdfParse = require('pdf-parse');
 import { groqClient, AI_MODEL as GROQ_MODEL } from '../../config/groq.config';
 import { TAiAnalysis, TDocumentCategory } from '../document/document.interface';
 
@@ -190,8 +190,8 @@ const extractTextFromDocument = async (
     // 2. PDF Files
     if (mimeType.includes('pdf') || mimeType === 'application/pdf') {
       try {
-        // pdf-parse is imported with @ts-ignore, cast to any to invoke
-        const pdfData = await (pdfParse as any)(buffer);
+        // pdf-parse imported with require() - call directly
+        const pdfData = await pdfParse(buffer);
         let text = pdfData.text || '';
         
         const alphaNumericCount = (text.match(/[a-zA-Z0-9]/g) || []).length;
