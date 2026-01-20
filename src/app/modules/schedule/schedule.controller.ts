@@ -64,10 +64,23 @@ const deleteEvent = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getTodaySchedule = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId;
+  const result = await ScheduleService.getTodaySchedule(userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Today\'s schedule retrieved successfully',
+    data: result,
+  });
+});
+
 export const ScheduleController = {
   createEvent,
   getAllEvents,
   getEventById,
   updateEvent,
-  deleteEvent
+  deleteEvent,
+  getTodaySchedule
 };

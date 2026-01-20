@@ -16,6 +16,7 @@ import { LegalRoutes } from '../modules/legal/legal.route';
 import { MessageRoutes } from '../modules/message/message.route';
 import { CommunityRoutes } from '../modules/community/community.route';
 import { ScheduleRoutes } from '../modules/schedule/schedule.route';
+import { AnalyticsRoutes } from '../modules/analytics/analytics.route';
 
 const router = Router();
 
@@ -81,8 +82,16 @@ const moduleRoutes = [
     route: MessageRoutes,
   },
   {
+    path: '/messages',
+    route: MessageRoutes,
+  },
+  {
     path: '/community',
     route: CommunityRoutes,
+  },
+  {
+    path: '/analytics',
+    route: AnalyticsRoutes,
   },
 ];
 

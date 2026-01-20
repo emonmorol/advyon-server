@@ -12,6 +12,12 @@ router.post(
 );
 
 router.get(
+  '/today',
+  auth(USER_ROLE.lawyer, USER_ROLE.admin, USER_ROLE.client),
+  ScheduleController.getTodaySchedule
+);
+
+router.get(
   '/',
   auth(USER_ROLE.lawyer, USER_ROLE.admin, USER_ROLE.client),
   ScheduleController.getAllEvents

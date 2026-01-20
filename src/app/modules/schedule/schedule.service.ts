@@ -46,10 +46,32 @@ const deleteEvent = async (id: string): Promise<ISchedule | null> => {
   return result;
 };
 
+// Phase 4: Get today's schedule
+const getTodaySchedule = async (userId: string): Promise<ISchedule[]> => {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const result = await Schedule.find({
+    participants: userId,
+    date: {
+      $gte: startOfDay,
+      $lte: endOfDay
+    }
+  })
+    .populate('caseId', 'title ref')
+    .sort({ startTime: 1 });
+    
+  return result;
+};
+
 export const ScheduleService = {
   createEvent,
   getAllEvents,
   getEventById,
   updateEvent,
-  deleteEvent
+  deleteEvent,
+  getTodaySchedule
 };
