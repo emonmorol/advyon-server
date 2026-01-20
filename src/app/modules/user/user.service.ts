@@ -38,8 +38,8 @@ const createUser = async (file: any, payload: any) => {
     } else if (userData.role === 'admin') {
       generatedId = await generateAdminId();
     } else {
-        // Fallback or error
-        throw new AppError(httpStatus.BAD_REQUEST, 'Invalid role for user creation');
+      // Fallback or error
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid role for user creation');
     }
 
     userData.id = generatedId;
@@ -161,7 +161,7 @@ const getPreferences = async (userId: string) => {
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
-  
+
   // Return preferences with defaults if not set
   return user.preferences || {
     theme: 'system',
@@ -184,7 +184,7 @@ const updatePreferences = async (userId: string, preferences: any) => {
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
-  
+
   // Merge existing preferences with new ones (deep merge)
   const currentPrefs = user.preferences as any || {};
   const mergedPreferences = {
@@ -200,13 +200,13 @@ const updatePreferences = async (userId: string, preferences: any) => {
       defaultView: preferences.dashboardConfig?.defaultView ?? currentPrefs.dashboardConfig?.defaultView ?? 'classic',
     },
   };
-  
+
   const result = await User.findOneAndUpdate(
     { id: userId },
     { preferences: mergedPreferences },
     { new: true }
   );
-  
+
   return result?.preferences;
 };
 
@@ -247,8 +247,8 @@ const updateMyProfile = async (userId: string, payload: Partial<TUser>) => {
 
 // Change password
 const changePassword = async (
-  userId: string, 
-  currentPassword: string, 
+  userId: string,
+  currentPassword: string,
   newPassword: string
 ) => {
   const user = await User.findOne({ id: userId }).select('+password');
@@ -271,7 +271,7 @@ const changePassword = async (
 
   const result = await User.findOneAndUpdate(
     { id: userId },
-    { 
+    {
       password: hashedPassword,
       passwordChangedAt: new Date(),
       needsPasswordChange: false,
@@ -307,7 +307,7 @@ const getLawyerClients = async (lawyerId: string) => {
       if (!uniqueClients.has(clientUser.id)) {
         // Fetch client profile for additional details
         const clientProfile = await ClientProfile.findOne({ userId: clientUser._id });
-        
+
         uniqueClients.set(clientUser.id, {
           id: clientUser.id,
           fullName: clientUser.fullName,
