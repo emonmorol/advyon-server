@@ -354,7 +354,7 @@ describe('Auth Service Unit Tests', () => {
   describe('syncUserFromClerk', () => {
     it('should create new user with default values', async () => {
       const { AuthServices } = require('./auth.service');
-      
+
       // Mock User.findOne to return null (user doesn't exist)
       jest.spyOn(User, 'findOne').mockResolvedValue(null);
       jest.spyOn(User, 'create').mockResolvedValue({
@@ -369,7 +369,7 @@ describe('Auth Service Unit Tests', () => {
       } as any);
 
       const result = await AuthServices.syncUserFromClerk(mockClerkUserId, mockEmail);
-      
+
       expect(result.needsOnboarding).toBe(true);
       expect(result.status).toBe('in-progress');
     });
@@ -392,6 +392,171 @@ describe('Auth Service Unit Tests', () => {
 
       expect(result.needsOnboarding).toBe(false);
       expect(mockExistingUser.save).toHaveBeenCalled();
+    });
+  });
+});
+
+describe('Role Field Validation Tests', () => {
+  describe('POST /auth/sync - Role Field Presence', () => {
+    it('should return role field in sync response for existing user', async () => {
+      const mockUser = {
+        id: 'LAW-0001',
+        clerkUserId: mockClerkUserId,
+        email: mockEmail,
+        role: 'lawyer',
+        status: 'active',
+        fullName: 'Jane Lawyer',
+        lastLoginAt: new Date(),
+        save: jest.fn(),
+      };
+
+      jest.spyOn(User, 'findOne').mockResolvedValue(mockUser as any);
+      const { AuthServices } = require('./auth.service');
+
+      const result = await AuthServices.syncUserFromClerk(mockClerkUserId, mockEmail);
+
+      // Verify role field is present and not null/undefined
+      expect(result).toBeDefined();
+      expect(result.role).toBeDefined();
+      expect(result.role).not.toBeNull();
+      expect(result.role).not.toBeUndefined();
+      expect(result.role).toBe('lawyer');
+    });
+
+    it('should return default role for new user on sync', async () => {
+      jest.spyOn(User, 'findOne').mockResolvedValue(null);
+      jest.spyOn(User, 'create').mockResolvedValue({
+        id: 'CLI-0002',
+        clerkUserId: mockClerkUserId + '_new',
+        email: 'new@example.com',
+        role: 'client', // Default role
+        status: 'in-progress',
+        fullName: 'Guest User',
+        isEmailVerified: true,
+        needsPasswordChange: false,
+      } as any);
+
+      const { AuthServices } = require('./auth.service');
+      const result = await AuthServices.syncUserFromClerk(mockClerkUserId + '_new', 'new@example.com');
+
+      expect(result.role).toBeDefined();
+      expect(result.role).toBe('client');
+    });
+  });
+
+  describe('GET /auth/me - Role Field Presence', () => {
+    it('should return role field in getCurrentUser response', async () => {
+      const mockUser = {
+        id: 'CLI-0001',
+        _id: new mongoose.Types.ObjectId(),
+        clerkUserId: mockClerkUserId,
+        email: mockEmail,
+        role: 'client',
+        status: 'active',
+        fullName: 'John Client',
+        displayName: 'JC',
+        avatarUrl: 'https://example.com/avatar.jpg',
+        preferredLanguage: 'en',
+        timezone: 'UTC',
+        isEmailVerified: true,
+        lastLoginAt: new Date(),
+      };
+
+      jest.spyOn(User, 'findOne').mockResolvedValue(mockUser);
+      jest.spyOn(ClientProfile, 'findOne').mockResolvedValue({
+        phoneNumber: '+8801712345678',
+        address: '123 Main St',
+      });
+
+      const { AuthServices } = require('./auth.service');
+      const result = await AuthServices.getCurrentUser(mockClerkUserId);
+
+      expect(result).toBeDefined();
+      expect(result.user).toBeDefined();
+      expect(result.user.role).toBeDefined();
+      expect(result.user.role).not.toBeNull();
+      expect(result.user.role).not.toBeUndefined();
+      expect(result.user.role).toBe('client');
+    });
+
+    it('should throw error if user has no role when calling getCurrentUser', async () => {
+      const mockUser = {
+        id: 'CLI-0001',
+        clerkUserId: mockClerkUserId,
+        email: mockEmail,
+        role: null, // No role set
+        status: 'in-progress',
+      };
+
+      jest.spyOn(User, 'findOne').mockResolvedValue(mockUser);
+
+      const { AuthServices } = require('./auth.service');
+
+      await expect(AuthServices.getCurrentUser(mockClerkUserId)).rejects.toThrow(
+        'User has not completed onboarding'
+      );
+    });
+  });
+
+  describe('Role Field Across Different Roles', () => {
+    it('should correctly return lawyer role', async () => {
+      const mockUser = {
+        id: 'LAW-0001',
+        clerkUserId: 'clerk_lawyer',
+        email: 'lawyer@example.com',
+        role: 'lawyer',
+        status: 'active',
+        fullName: 'Jane Lawyer',
+        save: jest.fn(),
+      };
+
+      jest.spyOn(User, 'findOne').mockResolvedValue(mockUser);
+
+      const { AuthServices } = require('./auth.service');
+      const result = await AuthServices.syncUserFromClerk('clerk_lawyer', 'lawyer@example.com');
+
+      expect(result.role).toBe('lawyer');
+      expect(['client', 'lawyer', 'judge', 'admin', 'superAdmin']).toContain(result.role);
+    });
+
+    it('should correctly return judge role', async () => {
+      const mockUser = {
+        id: 'JUD-0001',
+        clerkUserId: 'clerk_judge',
+        email: 'judge@example.com',
+        role: 'judge',
+        status: 'active',
+        fullName: 'Judge Smith',
+        save: jest.fn(),
+      };
+
+      jest.spyOn(User, 'findOne').mockResolvedValue(mockUser);
+
+      const { AuthServices } = require('./auth.service');
+      const result = await AuthServices.syncUserFromClerk('clerk_judge', 'judge@example.com');
+
+      expect(result.role).toBe('judge');
+      expect(['client', 'lawyer', 'judge', 'admin', 'superAdmin']).toContain(result.role);
+    });
+
+    it('should correctly return admin role', async () => {
+      const mockUser = {
+        id: 'ADM-0001',
+        clerkUserId: 'clerk_admin',
+        email: 'admin@example.com',
+        role: 'admin',
+        status: 'active',
+        fullName: 'Admin User',
+        save: jest.fn(),
+      };
+
+      jest.spyOn(User, 'findOne').mockResolvedValue(mockUser);
+
+      const { AuthServices } = require('./auth.service');
+      const result = await AuthServices.syncUserFromClerk('clerk_admin', 'admin@example.com');
+
+      expect(result.role).toBe('admin');
+      expect(['client', 'lawyer', 'judge', 'admin', 'superAdmin']).toContain(result.role);
     });
   });
 });

@@ -53,11 +53,71 @@ router.post(
  * /users/me/profile:
  *   get:
  *     summary: Get my profile
- *     description: Retrieves the profile of the logged-in user.
+ *     description: Retrieves the profile of the logged-in user including role for sidebar rendering.
  *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Profile retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: User profile retrieved successfully
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       example: CLI-0001
+ *                     email:
+ *                       type: string
+ *                       example: user@example.com
+ *                     fullName:
+ *                       type: string
+ *                       example: John Doe
+ *                     displayName:
+ *                       type: string
+ *                       example: JD
+ *                     role:
+ *                       type: string
+ *                       enum: [client, lawyer, judge, admin, superAdmin]
+ *                       description: User role for sidebar rendering
+ *                       example: client
+ *                     status:
+ *                       type: string
+ *                       enum: [in-progress, active, inactive, blocked]
+ *                       example: active
+ *                     avatarUrl:
+ *                       type: string
+ *                       format: uri
+ *                       example: https://example.com/avatar.jpg
+ *                     preferredLanguage:
+ *                       type: string
+ *                       example: en
+ *                     timezone:
+ *                       type: string
+ *                       example: UTC
+ *                     isEmailVerified:
+ *                       type: boolean
+ *                       example: true
+ *                     phone:
+ *                       type: string
+ *                       example: +8801712345678
+ *                     address:
+ *                       type: string
+ *                       example: 123 Main St
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
  */
 router.get(
   '/me/profile',

@@ -82,10 +82,6 @@ const moduleRoutes = [
     route: MessageRoutes,
   },
   {
-    path: '/messages',
-    route: MessageRoutes,
-  },
-  {
     path: '/community',
     route: CommunityRoutes,
   },
