@@ -139,7 +139,7 @@ const chatWithAI = async (message: string, context: string, history: any[] = [])
     const completion = await groqClient.chat.completions.create({
       messages: [
         { role: 'system', content: systemPrompt },
-        ...history.slice(-10).map((msg: any) => ({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content })),
+        ...history.slice(-10).map((msg: any) => ({ role: msg.role === 'user' ? 'user' as const : 'assistant' as const, content: msg.content })),
         { role: 'user', content: message }
       ],
       model: GROQ_MODEL,

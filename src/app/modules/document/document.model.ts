@@ -127,6 +127,16 @@ const documentSchema = new Schema<TDocument>(
       type: Date,
       default: Date.now,
     },
+
+    // Soft delete fields
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

@@ -90,6 +90,10 @@ export interface TDocument extends Document {
   uploadedAt: Date;
   createdAt: Date;
   updatedAt: Date;
+
+  // Soft delete
+  isDeleted: boolean;
+  deletedAt: Date | null;
 }
 
 // Upload document payload

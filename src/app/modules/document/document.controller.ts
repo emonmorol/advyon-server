@@ -232,7 +232,8 @@ async function processDocumentWithAI(
     console.log(`[Document Controller] AI Analysis received. Confidence: ${aiAnalysis.confidenceScore}, Category: ${aiAnalysis.documentCategory}`);
 
     // Step 3: Update document in database
-    const isAnalysisReliable = aiAnalysis.confidenceScore > 0.6 && aiAnalysis.documentCategory !== 'Other';
+    // Update folderName if confidence is good (>0.6) - regardless of category
+    const isAnalysisReliable = aiAnalysis.confidenceScore > 0.6 && aiAnalysis.documentCategory;
     
     const updateData: any = {
       processingStatus: 'completed',
@@ -240,9 +241,10 @@ async function processDocumentWithAI(
       analysisStatus: 'analyzed',
     };
 
-    // Auto-organize: Update folder if analysis is reliable
-    if (isAnalysisReliable && aiAnalysis.documentCategory) {
+    // Auto-organize: Update folder based on AI category (includes 'Other')
+    if (isAnalysisReliable) {
       updateData.folderName = aiAnalysis.documentCategory;
+      console.log(`[Document Controller] Auto-filing to folder: ${aiAnalysis.documentCategory}`);
     }
     
     const updatedDoc = await DocumentModel.findOneAndUpdate(
