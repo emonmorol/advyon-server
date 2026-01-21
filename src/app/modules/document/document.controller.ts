@@ -544,6 +544,53 @@ const updateDocumentSummary = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * Get all documents for the authenticated user across all cases
+ * GET /documents/my-documents
+ */
+const getAllDocuments = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+
+  // Resolve user ID to MongoDB ObjectId
+  let resolvedUserId: string = userId;
+  const isUserValidObjectId = mongoose.Types.ObjectId.isValid(userId);
+
+  if (isUserValidObjectId) {
+    const user = await User.findById(userId);
+    if (!user) {
+      const userByCustomId = await User.findOne({ id: userId });
+      if (!userByCustomId) {
+        throw new AppError(httpStatus.NOT_FOUND, `User not found: ${userId}`);
+      }
+      resolvedUserId = userByCustomId._id.toString();
+    } else {
+      resolvedUserId = user._id.toString();
+    }
+  } else {
+    const user = await User.findOne({ id: userId });
+    if (!user) {
+      throw new AppError(httpStatus.NOT_FOUND, `User not found: ${userId}`);
+    }
+    resolvedUserId = user._id.toString();
+  }
+
+  // Extract query parameters
+  const { folder, processingStatus, category } = req.query;
+
+  const result = await DocumentServices.getAllUserDocuments(resolvedUserId, {
+    folder: folder as string | undefined,
+    processingStatus: processingStatus as 'pending' | 'processing' | 'completed' | 'failed' | undefined,
+    category: category as string | undefined,
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Documents retrieved successfully',
+    data: result,
+  });
+});
+
 export const DocumentControllers = {
   uploadDocument,
   uploadDocumentLegacy,
@@ -556,4 +603,6 @@ export const DocumentControllers = {
   downloadDocument,
   getDocumentContent,
   updateDocumentSummary,
+  getAllDocuments,
 };
+
