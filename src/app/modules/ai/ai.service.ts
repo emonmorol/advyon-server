@@ -1,26 +1,15 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { groqClient, AI_MODEL as GROQ_MODEL } from '../../config/groq.config';
-import { geminiAI, GEMINI_MODEL, DOCUMENT_ANALYSIS_SCHEMA, isGeminiAvailable } from '../../config/gemini.config';
+import { openrouterClient, OPENROUTER_VISION_MODEL, isOpenRouterAvailable } from '../../config/openrouter.config';
 import { TAiAnalysis, TDocumentCategory } from '../document/document.interface';
 
 // Valid document categories
 const VALID_CATEGORIES: TDocumentCategory[] = [
-  'Affidavit',
-  'Evidence',
-  'Contract',
-  'Court Filing',
-  'Correspondence',
-  'Legal Brief',
-  'Pleading',
-  'Discovery',
-  'Motion',
-  'Order',
-  'Judgment',
-  'Settlement',
-  'Other',
+  'Affidavit', 'Evidence', 'Contract', 'Court Filing', 'Correspondence',
+  'Legal Brief', 'Pleading', 'Discovery', 'Motion', 'Order', 'Judgment', 'Settlement', 'Other',
 ];
 
-// Default/fallback AI analysis result
+// Default analysis result
 const DEFAULT_AI_ANALYSIS: TAiAnalysis = {
   summary: 'Unable to analyze document content.',
   rawSummary: '',
@@ -31,73 +20,65 @@ const DEFAULT_AI_ANALYSIS: TAiAnalysis = {
   documentCategory: 'Other',
   confidenceScore: 0,
   analyzedAt: new Date(),
-  modelVersion: 'gemini-2.0-flash',
+  modelVersion: 'openrouter',
 };
 
-// Legal document analysis prompt
-const LEGAL_ANALYSIS_PROMPT = `You are an expert legal document analyzer. Analyze the provided document thoroughly.
+const LEGAL_ANALYSIS_PROMPT = `You are an expert legal document analyzer. Analyze this document and return a JSON response with:
+{
+  "summary": "2-3 paragraph professional summary",
+  "rawSummary": "Detailed markdown explanation",
+  "keyPoints": ["point 1", "point 2"],
+  "extractedEntities": [{"name": "Entity", "type": "person/org/date", "count": 1}],
+  "legalRefs": [{"citation": "Law Name", "description": "desc", "relevance": "high/medium/low"}],
+  "suggestions": ["Suggestion 1", "Suggestion 2"],
+  "documentCategory": "One of: ${VALID_CATEGORIES.join(', ')}",
+  "confidenceScore": 0.85
+}
 
-Your task:
-1. Read and understand the entire document content (text and any visual elements)
-2. Identify the document type/category from: ${VALID_CATEGORIES.join(', ')}
-3. Extract key information, entities, and legal references
-4. Provide a professional summary and actionable suggestions
-
-Be thorough and accurate. This is a legal document that requires careful analysis.
-If the document is unclear or you cannot read it properly, provide a low confidence score.`;
-
-// Helper for retry logic
-const withRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> => {
-  try {
-    return await fn();
-  } catch (error: any) {
-    if (retries > 0 && (error?.status === 429 || error?.code === 429 || error?.response?.status === 429)) {
-      console.warn(`Rate limit hit, retrying in ${delay}ms... (${retries} attempts left)`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return withRetry(fn, retries - 1, delay * 2);
-    }
-    throw error;
-  }
-};
+Be thorough and accurate. Return ONLY valid JSON.`;
 
 /**
- * Analyze a document using Gemini Vision
- * SIMPLE: Pass file buffer → Gemini reads it directly → Returns analysis
+ * Analyze document using OpenRouter (Primary - FREE)
+ * Uses Gemini 2.0 Flash via OpenRouter with vision capabilities
  */
-const analyzeWithGemini = async (buffer: Buffer, mimeType: string): Promise<TAiAnalysis> => {
-  if (!geminiAI) {
-    throw new Error('Gemini AI not initialized - check GEMINI_API_KEY in .env');
+const analyzeWithOpenRouter = async (buffer: Buffer, mimeType: string): Promise<TAiAnalysis> => {
+  if (!openrouterClient) {
+    throw new Error('OpenRouter not configured - check OPENROUTER_API_KEY');
   }
 
-  console.log(`[Gemini] Starting vision analysis. MIME: ${mimeType}, Size: ${buffer.length} bytes`);
+  console.log(`[OpenRouter] Starting analysis. MIME: ${mimeType}, Size: ${buffer.length} bytes`);
 
   const base64Data = buffer.toString('base64');
+  const dataUrl = `data:${mimeType};base64,${base64Data}`;
 
-  const response = await withRetry(() => 
-    geminiAI!.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: [{
+  const response = await openrouterClient.chat.completions.create({
+    model: OPENROUTER_VISION_MODEL,
+    messages: [
+      {
         role: 'user',
-        parts: [
-          { inlineData: { mimeType, data: base64Data } },
-          { text: LEGAL_ANALYSIS_PROMPT }
+        content: [
+          { type: 'image_url', image_url: { url: dataUrl } },
+          { type: 'text', text: LEGAL_ANALYSIS_PROMPT }
         ]
-      }],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: DOCUMENT_ANALYSIS_SCHEMA
       }
-    })
-  );
+    ],
+    response_format: { type: 'json_object' },
+    max_tokens: 4096,
+  });
 
-  const responseText = response.text;
-  console.log(`[Gemini] Response received. Length: ${responseText?.length || 0}`);
+  const responseText = response.choices[0]?.message?.content || '{}';
+  console.log(`[OpenRouter] Response received. Length: ${responseText.length}`);
 
-  if (!responseText) {
-    throw new Error('Empty response from Gemini');
+  // Parse JSON response
+  let parsedResult;
+  try {
+    // Try to extract JSON from response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    parsedResult = JSON.parse(jsonMatch ? jsonMatch[0] : responseText);
+  } catch (e) {
+    console.error('[OpenRouter] Failed to parse JSON:', e);
+    parsedResult = {};
   }
-
-  const parsedResult = JSON.parse(responseText);
 
   const analysis: TAiAnalysis = {
     summary: parsedResult.summary || DEFAULT_AI_ANALYSIS.summary,
@@ -107,93 +88,73 @@ const analyzeWithGemini = async (buffer: Buffer, mimeType: string): Promise<TAiA
     legalRefs: Array.isArray(parsedResult.legalRefs) ? parsedResult.legalRefs : [],
     suggestions: Array.isArray(parsedResult.suggestions) ? parsedResult.suggestions : [],
     documentCategory: VALID_CATEGORIES.includes(parsedResult.documentCategory)
-      ? parsedResult.documentCategory
-      : 'Other',
-    confidenceScore: typeof parsedResult.confidenceScore === 'number' 
-      ? Math.min(1, Math.max(0, parsedResult.confidenceScore)) 
-      : 0.5,
+      ? parsedResult.documentCategory : 'Other',
+    confidenceScore: typeof parsedResult.confidenceScore === 'number'
+      ? Math.min(1, Math.max(0, parsedResult.confidenceScore)) : 0.5,
     analyzedAt: new Date(),
-    modelVersion: GEMINI_MODEL,
+    modelVersion: OPENROUTER_VISION_MODEL,
   };
 
-  console.log(`[Gemini] ✅ Analysis complete. Category: ${analysis.documentCategory}, Confidence: ${analysis.confidenceScore}`);
+  console.log(`[OpenRouter] ✅ Analysis complete. Category: ${analysis.documentCategory}, Confidence: ${analysis.confidenceScore}`);
   return analysis;
 };
 
 /**
  * Main document analysis function
- * Uses Gemini Vision to read files directly
+ * Priority: OpenRouter (free) → Fallback error
  */
 const analyzeLegalDocument = async (
-  _fileText: string,  // Ignored - kept for backward compatibility
-  buffer?: Buffer, 
+  _fileText: string,
+  buffer?: Buffer,
   mimeType?: string
 ): Promise<TAiAnalysis> => {
   console.log(`[AI Service] analyzeLegalDocument called. Buffer: ${buffer?.length || 0} bytes`);
 
   if (!buffer || !mimeType) {
-    console.error('[AI Service] No buffer or mimeType provided');
-    return {
-      ...DEFAULT_AI_ANALYSIS,
-      summary: 'No file content provided for analysis.',
-    };
+    return { ...DEFAULT_AI_ANALYSIS, summary: 'No file content provided.' };
   }
 
-  // Use Gemini Vision
-  if (isGeminiAvailable()) {
+  // Use OpenRouter (FREE)
+  if (isOpenRouterAvailable()) {
     try {
-      return await analyzeWithGemini(buffer, mimeType);
+      return await analyzeWithOpenRouter(buffer, mimeType);
     } catch (error: any) {
-      console.error('[AI Service] Gemini analysis failed:', error.message);
-      return {
-        ...DEFAULT_AI_ANALYSIS,
-        summary: `Analysis failed: ${error.message}. Please check your GEMINI_API_KEY.`,
-      };
+      console.error('[AI Service] OpenRouter failed:', error.message);
+      return { ...DEFAULT_AI_ANALYSIS, summary: `Analysis failed: ${error.message}` };
     }
   }
 
-  // No AI available
-  console.error('[AI Service] No AI provider available');
-  return {
-    ...DEFAULT_AI_ANALYSIS,
-    summary: 'AI service unavailable. Please configure GEMINI_API_KEY in .env',
-  };
+  return { ...DEFAULT_AI_ANALYSIS, summary: 'No AI provider available. Configure OPENROUTER_API_KEY.' };
 };
 
 /**
- * Chat with AI about a document (Uses Groq)
+ * Chat with AI (Uses Groq - fast text chat)
  */
 const chatWithAI = async (message: string, context: string, history: any[] = []): Promise<string> => {
   try {
     const systemPrompt = `You are an expert legal assistant named Advyon AI.
-    ${context ? `CONTEXT (Use this to answer): \n${context}` : ''}
-    
-    Answer the user's question clearly and professionally. Cite the context where possible.`;
+    ${context ? `CONTEXT:\n${context}` : ''}
+    Answer clearly and professionally.`;
 
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      ...history.slice(-10).map((msg: any) => ({ 
-        role: msg.role === 'user' ? 'user' : 'assistant', 
-        content: msg.content 
-      })),
-      { role: 'user', content: message }
-    ];
-
-    const completion = await withRetry(() => groqClient.chat.completions.create({
-      messages: messages as any,
+    const completion = await groqClient.chat.completions.create({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...history.slice(-10).map((msg: any) => ({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content })),
+        { role: 'user', content: message }
+      ],
       model: GROQ_MODEL,
-    }));
+    });
 
     return completion.choices[0]?.message?.content || "I couldn't generate a response.";
   } catch (error) {
     console.error('Groq chat error:', error);
-    return "I'm having trouble processing your request right now. Please try again.";
+    return "I'm having trouble. Please try again.";
   }
 };
 
 export const AIService = {
   analyzeLegalDocument,
-  analyzeWithGemini,
+  analyzeWithOpenRouter,
   chatWithAI,
-  isGeminiAvailable,
+  isOpenRouterAvailable,
 };
