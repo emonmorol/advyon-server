@@ -108,7 +108,7 @@ const updateMyProfile = catchAsync(async (req, res) => {
 const changePassword = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { currentPassword, newPassword } = req.body;
-  
+
   if (!currentPassword || !newPassword) {
     sendResponse(res, {
       statusCode: httpStatus.BAD_REQUEST,
@@ -118,7 +118,7 @@ const changePassword = catchAsync(async (req, res) => {
     });
     return;
   }
-  
+
   const result = await UserServices.changePassword(userId, currentPassword, newPassword);
   sendResponse(res, {
     statusCode: httpStatus.OK,
