@@ -1,11 +1,13 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-dotenv.config({ path: path.join((process.cwd(), '.env')) });
+dotenv.config({ path: path.join(process.cwd(), '.env') });
 
 export default {
   NODE_ENV: process.env.NODE_ENV,
   port: process.env.PORT,
+  db_user: process.env.DB_USER,
+  db_password: process.env.DB_PASSWORD,
   database_url: process.env.DATABASE_URL,
   bcrypt_salt_rounds: process.env.BCRYPT_SALT_ROUNDS,
   default_password: process.env.DEFAULT_PASS,
@@ -18,4 +20,9 @@ export default {
   cloudinary_api_key: process.env.CLOUDINARY_API_KEY,
   cloudinary_api_secret: process.env.CLOUDINARY_API_SECRET,
   super_admin_password: process.env.SUPER_ADMIN_PASSWORD,
+  clerk_secret_key: process.env.CLERK_SECRET_KEY,
+  clerk_publishable_key: process.env.CLERK_PUBLISHABLE_KEY,
+  openrouter_api_key: process.env.OPENROUTER_API_KEY,
+  groq_api_key: process.env.GROQ_API_KEY,
+  gemini_api_key: process.env.GEMINI_API_KEY,
 };
