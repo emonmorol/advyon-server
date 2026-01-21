@@ -70,6 +70,15 @@ export interface TDocument extends Document {
   // AI Analysis results
   aiAnalysis?: TAiAnalysis;
 
+  // Phase 3.1: Auto-Filing
+  autoFiling?: {
+    status: 'pending' | 'moved' | 'manual_override' | 'failed';
+    originalFolder: string;
+    targetFolder: string;
+    confidenceScore: number;
+    movedAt: Date;
+  };
+
   // Legacy field (deprecated)
   analysisStatus: TDocumentAnalysisStatus;
 
@@ -81,6 +90,10 @@ export interface TDocument extends Document {
   uploadedAt: Date;
   createdAt: Date;
   updatedAt: Date;
+
+  // Soft delete
+  isDeleted: boolean;
+  deletedAt: Date | null;
 }
 
 // Upload document payload

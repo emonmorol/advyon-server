@@ -4,7 +4,7 @@ import { Document, Types } from 'mongoose';
 import { TDocument } from '../document/document.interface';
 
 // Case status enum
-export type TCaseStatus = 'active' | 'pending' | 'review' | 'closed';
+export type TCaseStatus = 'active' | 'pending' | 'review' | 'closed' | 'archived';
 
 // Case urgency enum
 export type TCaseUrgency = 'low' | 'medium' | 'high';
@@ -64,6 +64,7 @@ export interface TCaseQuery {
   search?: string;
   status?: TCaseStatus;
   urgency?: TCaseUrgency;
+  includeArchived?: boolean; // Phase 7: Include archived cases
   page?: number;
   limit?: number;
 }

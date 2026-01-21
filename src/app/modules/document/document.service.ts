@@ -112,8 +112,8 @@ const getDocumentsByCase = async (
     );
   }
 
-  // Build filter
-  const filter: any = { caseId: caseData._id };
+  // Build filter - exclude soft-deleted documents
+  const filter: any = { caseId: caseData._id, isDeleted: { $ne: true } };
 
   if (query.folder) {
     filter.folderName = query.folder;
@@ -179,16 +179,11 @@ const deleteDocument = async (
     throw new AppError(httpStatus.BAD_REQUEST, 'Document does not belong to this case');
   }
 
-  // Delete from Cloudinary
-  try {
-    await cloudinaryUpload.uploader.destroy(document.cloudinaryPublicId);
-  } catch (error) {
-    console.error('Error deleting from Cloudinary:', error);
-    // Continue with database deletion even if Cloudinary deletion fails
-  }
-
-  // Delete from database
-  await DocumentModel.findByIdAndDelete(document._id);
+  // Soft delete - mark as deleted instead of removing
+  await DocumentModel.findByIdAndUpdate(document._id, {
+    isDeleted: true,
+    deletedAt: new Date(),
+  });
 
   // Log activity
   await ActivityService.logActivity({
@@ -372,6 +367,131 @@ const updateDocumentSummary = async (documentId: string, summary: string) => {
   return document;
 };
 
+/**
+ * Phase 3.1: Auto-file document based on AI analysis
+ */
+const autoFileDocument = async (documentId: string): Promise<void> => {
+  const doc = await DocumentModel.findOne({ id: documentId });
+  if (!doc) throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+
+  const analysis = doc.aiAnalysis;
+  
+  if (analysis?.documentCategory && analysis?.confidenceScore > 0.85) {
+    const originalFolder = doc.folderName;
+    const targetFolder = analysis.documentCategory; // e.g., "Evidence", "Pleadings"
+    
+    // Update folder and auto-filing status
+    doc.folderName = targetFolder;
+    doc.autoFiling = {
+      status: 'moved',
+      originalFolder,
+      targetFolder,
+      confidenceScore: analysis.confidenceScore,
+      movedAt: new Date()
+    };
+    await doc.save();
+    
+    // Log activity
+    await ActivityService.logActivity({
+      type: 'document_moved',
+      message: `Auto-filed document ${doc.fileName} from ${originalFolder} to ${targetFolder}`,
+      userId: doc.uploadedBy,
+      caseId: doc.caseId,
+      documentId: doc._id as any
+    });
+  } else {
+    doc.autoFiling = {
+      status: 'pending',
+      originalFolder: doc.folderName,
+      targetFolder: '',
+      confidenceScore: analysis?.confidenceScore || 0,
+      movedAt: new Date(),
+    };
+    await doc.save();
+  }
+};
+
+/**
+ * Get all documents for a user across all cases
+ * @param userId - The user's MongoDB ObjectId
+ * @param query - Optional query parameters for filtering
+ */
+const getAllUserDocuments = async (
+  userId: string,
+  query: {
+    folder?: string;
+    processingStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+    category?: string;
+  } = {},
+) => {
+  // Build filter - get documents uploaded by this user, excluding soft-deleted
+  const filter: any = {
+    $or: [{ uploadedBy: userId }, { uploaderId: userId }],
+    isDeleted: { $ne: true },
+  };
+
+  // Apply optional filters
+  if (query.folder) {
+    filter.folderName = query.folder;
+  }
+  if (query.processingStatus) {
+    filter.processingStatus = query.processingStatus;
+  }
+  if (query.category) {
+    filter['aiAnalysis.documentCategory'] = query.category;
+  }
+
+  // Get documents with case and uploader info populated
+  const documents = await DocumentModel.find(filter)
+    .populate('caseId', 'id caseNumber title status')
+    .populate('uploadedBy', 'id fullName email')
+    .sort({ uploadedAt: -1 });
+
+  // Group documents by folder
+  const groupedByFolder: TGroupedDocuments = {};
+  documents.forEach((doc) => {
+    if (!groupedByFolder[doc.folderName]) {
+      groupedByFolder[doc.folderName] = [];
+    }
+    groupedByFolder[doc.folderName].push(doc);
+  });
+
+  // Group documents by case
+  const groupedByCase: { [caseId: string]: { caseInfo: any; documents: any[] } } = {};
+  documents.forEach((doc) => {
+    const caseData = doc.caseId as any;
+    if (caseData && caseData.id) {
+      if (!groupedByCase[caseData.id]) {
+        groupedByCase[caseData.id] = {
+          caseInfo: {
+            id: caseData.id,
+            caseNumber: caseData.caseNumber,
+            title: caseData.title,
+            status: caseData.status,
+          },
+          documents: [],
+        };
+      }
+      groupedByCase[caseData.id].documents.push(doc);
+    }
+  });
+
+  // Get category statistics
+  const categoryStats: { [category: string]: number } = {};
+  documents.forEach((doc) => {
+    const category = doc.aiAnalysis?.documentCategory || 'Uncategorized';
+    categoryStats[category] = (categoryStats[category] || 0) + 1;
+  });
+
+  return {
+    documents,
+    groupedByFolder,
+    groupedByCase: Object.values(groupedByCase),
+    categoryStats,
+    total: documents.length,
+  };
+};
+
 export const DocumentServices = {
   uploadDocument,
   getDocumentsByCase,
@@ -381,4 +501,7 @@ export const DocumentServices = {
   updateCloudinaryDetails,
   getDocumentContent,
   updateDocumentSummary,
+  autoFileDocument,
+  getAllUserDocuments,
 };
+

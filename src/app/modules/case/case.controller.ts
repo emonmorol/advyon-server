@@ -112,10 +112,48 @@ const deleteCase = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * Archive a case (Phase 7)
+ * PATCH /cases/:caseId/archive
+ */
+const archiveCase = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const { caseId } = req.params;
+
+  const result = await CaseServices.archiveCase(caseId, userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Case archived successfully',
+    data: result,
+  });
+});
+
+/**
+ * Restore an archived case (Phase 7)
+ * PATCH /cases/:caseId/restore
+ */
+const restoreCase = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const { caseId } = req.params;
+
+  const result = await CaseServices.restoreCase(caseId, userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Case restored successfully',
+    data: result,
+  });
+});
+
 export const CaseControllers = {
   createCase,
   getAllCases,
   getCaseById,
   updateCase,
   deleteCase,
+  archiveCase,
+  restoreCase,
 };

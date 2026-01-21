@@ -15,6 +15,13 @@ const router = express.Router();
 // These are removed to avoid duplication.
 
 /**
+ * GET /documents/my-documents
+ * Get all documents for the authenticated user across all cases
+ * Requires authentication
+ */
+router.get('/my-documents', auth(), DocumentControllers.getAllDocuments);
+
+/**
  * GET /documents/:documentId/content
  * Get document content (viewer)
  */

@@ -92,6 +92,19 @@ const documentSchema = new Schema<TDocument>(
       default: null,
     },
 
+    // Phase 3.1: Auto-Filing
+    autoFiling: {
+      status: {
+        type: String,
+        enum: ['pending', 'moved', 'manual_override', 'failed'],
+        default: 'pending',
+      },
+      originalFolder: { type: String },
+      targetFolder: { type: String },
+      confidenceScore: { type: Number },
+      movedAt: { type: Date },
+    },
+
     // Legacy analysis status (deprecated)
     analysisStatus: {
       type: String,
@@ -113,6 +126,16 @@ const documentSchema = new Schema<TDocument>(
     uploadedAt: {
       type: Date,
       default: Date.now,
+    },
+
+    // Soft delete fields
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
     },
   },
   {

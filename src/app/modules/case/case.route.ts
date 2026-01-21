@@ -175,6 +175,52 @@ router.delete('/:caseId',
   auth(),
    CaseControllers.deleteCase);
 
+/**
+ * @swagger
+ * /cases/{caseId}/archive:
+ *   patch:
+ *     summary: Archive a case (Phase 7)
+ *     description: Moves a case to archived status
+ *     tags: [Cases]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: caseId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Case archived successfully
+ */
+router.patch('/:caseId/archive', 
+  auth(), 
+  CaseControllers.archiveCase);
+
+/**
+ * @swagger
+ * /cases/{caseId}/restore:
+ *   patch:
+ *     summary: Restore an archived case (Phase 7)
+ *     description: Restores an archived case to active status
+ *     tags: [Cases]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: caseId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Case restored successfully
+ */
+router.patch('/:caseId/restore', 
+  auth(), 
+  CaseControllers.restoreCase);
+
 // =========================================================================
 // Document Routes for Case
 // =========================================================================

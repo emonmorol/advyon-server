@@ -6,7 +6,7 @@ const activitySchema = new Schema<TActivity>(
     type: {
       type: String,
       required: true,
-      enum: ['case_created', 'case_updated', 'document_uploaded', 'document_deleted', 'system_alert', 'user_joined'],
+      enum: ['case_created', 'case_updated', 'document_uploaded', 'document_deleted', 'system_alert', 'user_joined', 'document_moved'],
     },
     message: {
       type: String,

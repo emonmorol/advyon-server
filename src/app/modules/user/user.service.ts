@@ -127,10 +127,18 @@ const getMyProfile = async (userId: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
 
-  // Fetch basic details
+  // Fetch basic details including role
   const profile: any = {
+    id: user.id,
     email: user.email,
     displayName: user.displayName || user.fullName,
+    fullName: user.fullName,
+    role: user.role,
+    status: user.status,
+    avatarUrl: user.avatarUrl,
+    preferredLanguage: user.preferredLanguage,
+    timezone: user.timezone,
+    isEmailVerified: user.isEmailVerified,
     phone: '', // Placeholder
     address: '', // Placeholder
   };

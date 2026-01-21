@@ -197,111 +197,73 @@ async function processDocumentUploadAndAI(
 
 /**
  * Background process for AI analysis
- * This runs asynchronously after the upload is complete
+ * SIMPLE FLOW: Buffer → Gemini Vision → DB Update
+ * No text extraction needed - Gemini reads PDFs/images natively
  */
 async function processDocumentWithAI(
   documentId: string,
   file: Express.Multer.File,
-  fileUrl?: string // Optional: URL if we just uploaded it
+  fileUrl?: string
 ): Promise<void> {
   console.log(`[Document Controller] processDocumentWithAI started for Doc ID: ${documentId}`);
+  
   try {
-    // Extract text from document
+    // Step 1: Get file buffer (from memory or fetch from URL)
     let fileBuffer = file.buffer;
     
-    if (!fileBuffer && file.path) {
-        // If file.path exists, it might have been deleted if it was a temp file.
-        // However, if we passed it from the upload function, we might have just deleted it.
-        // Safer to fetch from the URL we just got if we don't have the buffer.
-        
-        if (fileUrl) {
-             const axios = await import('axios');
-             const response = await axios.default.get(fileUrl, { responseType: 'arraybuffer' });
-             fileBuffer = Buffer.from(response.data);
-        } else if (file.path.startsWith('http')) {
-            // It's a remote URL already
-            const axios = await import('axios');
-            const response = await axios.default.get(file.path, { responseType: 'arraybuffer' });
-            fileBuffer = Buffer.from(response.data);
-        } else {
-             // It's a local file path - try to read it, but catch if missing
-             try {
-                fileBuffer = fs.readFileSync(file.path);
-             } catch (e) {
-                 // If file is missing (deleted), and we have a URL (from DB??), try that.
-                 // But here we rely on fileUrl arg if possible.
-                 console.warn("Could not read local file, might be deleted. user provided URL?", fileUrl);
-                 if (!fileUrl) throw new Error("File content unavailable: Local file deleted and no URL provided.");
-             }
-        }
-    }
-    
-    // If we still don't have buffer but have a URL (maybe passed or in DB), fetch it.
     if (!fileBuffer && fileUrl) {
-         const axios = await import('axios');
-         const response = await axios.default.get(fileUrl, { responseType: 'arraybuffer' });
-         fileBuffer = Buffer.from(response.data);
+      console.log(`[Document Controller] Fetching file from Cloudinary URL...`);
+      const axios = await import('axios');
+      const response = await axios.default.get(fileUrl, { responseType: 'arraybuffer' });
+      fileBuffer = Buffer.from(response.data);
     }
 
     if (!fileBuffer) {
-        throw new Error('File content not available for analysis');
+      throw new Error('File content not available for analysis');
     }
 
-    const extractedText = await AIService.extractTextFromDocument(
-      fileBuffer,
-      file.mimetype,
-    );
+    console.log(`[Document Controller] File buffer ready. Size: ${fileBuffer.length} bytes, MIME: ${file.mimetype}`);
 
-    console.log(`[Document Controller] Text extracted. Length: ${extractedText?.length}`);
-
-    if (!extractedText || extractedText.length < 10) {
-        console.warn(`[Document Controller] Warning: Insufficient text for analysis for Doc ID: ${documentId}`);
-    }
-
-    // Analyze with Gemini AI
-    console.log(`[Document Controller] Sending to AI Service...`);
-    const aiAnalysis = await AIService.analyzeLegalDocument(extractedText, fileBuffer, file.mimetype);
+    // Step 2: Send directly to AI Service (Gemini Vision)
+    // No text extraction needed - Gemini reads the file directly
+    console.log(`[Document Controller] Sending to Gemini Vision...`);
+    const aiAnalysis = await AIService.analyzeLegalDocument('', fileBuffer, file.mimetype);
+    
     console.log(`[Document Controller] AI Analysis received. Confidence: ${aiAnalysis.confidenceScore}, Category: ${aiAnalysis.documentCategory}`);
 
-    // Update document with AI analysis results
-    // Also update the folder name based on the category
-    // Logic to determine final folder name
-    // 1. If AI is confident AND categorized it, we can suggest moving it.
-    // 2. BUT if the user explicitly uploaded to a specific folder (not General), we should probably keep it?
-    // 3. For now: Only move if currently 'General' or 'Other', OR if we want auto-organization.
-    // 4. If AI analysis failed (category 'Other', low confidence), definitely do NOT move it from a user-selected folder.
-    
-    const isAnalysisReliable = aiAnalysis.confidenceScore > 0.6 && aiAnalysis.documentCategory !== 'Other';
+    // Step 3: Update document in database
+    // Update folderName if confidence is good (>0.6) - regardless of category
+    const isAnalysisReliable = aiAnalysis.confidenceScore > 0.6 && aiAnalysis.documentCategory;
     
     const updateData: any = {
-        processingStatus: 'completed',
-        aiAnalysis,
-        analysisStatus: 'analyzed',
+      processingStatus: 'completed',
+      aiAnalysis,
+      analysisStatus: 'analyzed',
     };
 
-    // Only update folder if the analysis is reliable. 
-    // If analysis failed (confidence 0, category 'Other'), keep the original folder.
-    if (isAnalysisReliable && aiAnalysis.documentCategory) {
-        updateData.folderName = aiAnalysis.documentCategory;
+    // Auto-organize: Update folder based on AI category (includes 'Other')
+    if (isAnalysisReliable) {
+      updateData.folderName = aiAnalysis.documentCategory;
+      console.log(`[Document Controller] Auto-filing to folder: ${aiAnalysis.documentCategory}`);
     }
     
     const updatedDoc = await DocumentModel.findOneAndUpdate(
       { id: documentId },
       updateData,
-      { new: true } // Return updated doc
+      { new: true }
     );
 
     if (updatedDoc) {
-        console.log(`[Document Controller] DB Updated successfully for Doc ID: ${documentId}. AI Status: ${updatedDoc.analysisStatus}`);
+      console.log(`[Document Controller] ✅ DB Updated for Doc ID: ${documentId}. Status: ${updatedDoc.analysisStatus}`);
     } else {
-        console.error(`[Document Controller] CRITICAL: DB Update failed! Document not found for ID: ${documentId}`);
+      console.error(`[Document Controller] ❌ DB Update failed! Document not found: ${documentId}`);
     }
 
-    console.log(`AI analysis completed for document: ${documentId}`);
+    console.log(`✅ AI analysis completed for document: ${documentId}`);
+    
   } catch (error) {
-    console.error(`AI processing failed for document ${documentId}:`, error);
+    console.error(`❌ AI processing failed for document ${documentId}:`, error);
 
-    // Update status to failed
     await DocumentServices.updateProcessingStatus(
       documentId,
       'failed',
@@ -582,6 +544,53 @@ const updateDocumentSummary = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * Get all documents for the authenticated user across all cases
+ * GET /documents/my-documents
+ */
+const getAllDocuments = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+
+  // Resolve user ID to MongoDB ObjectId
+  let resolvedUserId: string = userId;
+  const isUserValidObjectId = mongoose.Types.ObjectId.isValid(userId);
+
+  if (isUserValidObjectId) {
+    const user = await User.findById(userId);
+    if (!user) {
+      const userByCustomId = await User.findOne({ id: userId });
+      if (!userByCustomId) {
+        throw new AppError(httpStatus.NOT_FOUND, `User not found: ${userId}`);
+      }
+      resolvedUserId = userByCustomId._id.toString();
+    } else {
+      resolvedUserId = user._id.toString();
+    }
+  } else {
+    const user = await User.findOne({ id: userId });
+    if (!user) {
+      throw new AppError(httpStatus.NOT_FOUND, `User not found: ${userId}`);
+    }
+    resolvedUserId = user._id.toString();
+  }
+
+  // Extract query parameters
+  const { folder, processingStatus, category } = req.query;
+
+  const result = await DocumentServices.getAllUserDocuments(resolvedUserId, {
+    folder: folder as string | undefined,
+    processingStatus: processingStatus as 'pending' | 'processing' | 'completed' | 'failed' | undefined,
+    category: category as string | undefined,
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Documents retrieved successfully',
+    data: result,
+  });
+});
+
 export const DocumentControllers = {
   uploadDocument,
   uploadDocumentLegacy,
@@ -594,4 +603,6 @@ export const DocumentControllers = {
   downloadDocument,
   getDocumentContent,
   updateDocumentSummary,
+  getAllDocuments,
 };
+

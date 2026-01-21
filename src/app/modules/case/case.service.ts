@@ -62,7 +62,7 @@ const getAllCases = async (userId: string, query: TCaseQuery) => {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
 
-  const { search, status, urgency, page = 1, limit = 10 } = query;
+  const { search, status, urgency, includeArchived, page = 1, limit = 10 } = query;
 
   // Build filter
   // Find cases where user is owner OR has shared access
@@ -80,6 +80,11 @@ const getAllCases = async (userId: string, query: TCaseQuery) => {
     ],
     isDeleted: { $ne: true }
   };
+
+  // Phase 7: Exclude archived by default unless explicitly requested
+  if (!includeArchived) {
+    filter.status = { $ne: 'archived' };
+  }
 
   if (search) {
     filter.$or = [
@@ -228,10 +233,80 @@ const deleteCase = async (caseId: string, userId: string) => {
   return { message: 'Case deleted successfully' };
 };
 
+/**
+ * Archive a case (Phase 7)
+ */
+const archiveCase = async (caseId: string, userId: string) => {
+  const user = await User.findOne({ id: userId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  const caseData = await Case.findOne({ id: caseId });
+  if (!caseData) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
+  }
+
+  if (caseData.createdBy.toString() !== user._id.toString()) {
+    throw new AppError(httpStatus.FORBIDDEN, 'You are not authorized to archive this case');
+  }
+
+  const archivedCase = await Case.findOneAndUpdate(
+    { id: caseId },
+    { status: 'archived' },
+    { new: true },
+  ).populate('createdBy', 'id fullName email');
+
+  await ActivityService.logActivity({
+    type: 'case_archived',
+    message: `Case archived: ${caseData.title}`,
+    userId: user._id,
+    caseId: caseData._id,
+  });
+
+  return archivedCase;
+};
+
+/**
+ * Restore an archived case (Phase 7)
+ */
+const restoreCase = async (caseId: string, userId: string) => {
+  const user = await User.findOne({ id: userId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  const caseData = await Case.findOne({ id: caseId });
+  if (!caseData) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
+  }
+
+  if (caseData.createdBy.toString() !== user._id.toString()) {
+    throw new AppError(httpStatus.FORBIDDEN, 'You are not authorized to restore this case');
+  }
+
+  const restoredCase = await Case.findOneAndUpdate(
+    { id: caseId },
+    { status: 'active' },
+    { new: true },
+  ).populate('createdBy', 'id fullName email');
+
+  await ActivityService.logActivity({
+    type: 'case_restored',
+    message: `Case restored: ${caseData.title}`,
+    userId: user._id,
+    caseId: caseData._id,
+  });
+
+  return restoredCase;
+};
+
 export const CaseServices = {
   createCase,
   getAllCases,
   getCaseById,
   updateCase,
   deleteCase,
+  archiveCase,
+  restoreCase,
 };

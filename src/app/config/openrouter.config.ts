@@ -1,8 +1,27 @@
+import OpenAI from 'openai';
 import config from './index';
 
-// Initialize OpenRouter client
-export const openRouterConfig = {
-  apiKey: config.openrouter_api_key || process.env.OPENROUTER_API_KEY,
+/**
+ * OpenRouter Configuration
+ * Uses OpenAI-compatible API with free vision models
+ */
+
+const apiKey = config.openrouter_api_key || '';
+
+export const openrouterClient = apiKey ? new OpenAI({
+  baseURL: 'https://openrouter.ai/api/v1',
+  apiKey: apiKey,
+  defaultHeaders: {
+    'HTTP-Referer': 'http://localhost:5000',
+    'X-Title': 'Advyon Legal Platform',
+  },
+}) : null;
+
+// Vision model on OpenRouter
+export const OPENROUTER_VISION_MODEL = 'google/gemini-2.5-flash-lite';
+
+export const isOpenRouterAvailable = (): boolean => {
+  return openrouterClient !== null;
 };
 
-export const OPENROUTER_MODEL = 'openai/gpt-oss-120b:free';
+console.log('OpenRouter configured:', isOpenRouterAvailable() ? 'Yes' : 'No');
