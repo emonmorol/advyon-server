@@ -37,4 +37,7 @@ router.post(
 /** POST /subscriptions/cancel — Cancel subscription at period end */
 router.post('/cancel', auth(), SubscriptionController.cancelSubscription);
 
+/** POST /subscriptions/verify-checkout — Verify completed checkout and sync subscription */
+router.post('/verify-checkout', auth(), SubscriptionController.verifyCheckout);
+
 export const SubscriptionRoutes = router;

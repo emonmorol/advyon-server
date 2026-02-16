@@ -206,10 +206,63 @@ const cancelSubscription = async (userId: string) => {
   return subscription;
 };
 
+/**
+ * Verify a completed Stripe Checkout session and sync subscription to local DB.
+ * This is the fallback for when webhooks can't reach the server (e.g. localhost).
+ */
+const verifyCheckoutSession = async (userId: string, sessionId: string) => {
+  if (!stripe) {
+    throw new AppError(
+      httpStatus.SERVICE_UNAVAILABLE,
+      SUBSCRIPTION_ERROR_MESSAGES.STRIPE_NOT_CONFIGURED,
+    );
+  }
+
+  const user = await User.findOne({ id: userId });
+  if (!user) throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+
+  // Retrieve the checkout session from Stripe
+  const session = await stripe.checkout.sessions.retrieve(sessionId, {
+    expand: ['subscription'],
+  });
+
+  if (session.payment_status !== 'paid') {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Payment not completed');
+  }
+
+  const stripeSubscription = session.subscription as any;
+  if (!stripeSubscription) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'No subscription found in session');
+  }
+
+  const plan = (session.metadata?.plan || 'starter') as TPlanTier;
+  const billingInterval = (session.metadata?.billingInterval || 'month') as TBillingInterval;
+
+  // Upsert local subscription record
+  const subscription = await Subscription.findOneAndUpdate(
+    { user: user._id },
+    {
+      user: user._id,
+      plan,
+      status: 'active',
+      billingInterval,
+      stripeCustomerId: session.customer as string,
+      stripeSubscriptionId: stripeSubscription.id,
+      currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
+      currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+      cancelAtPeriodEnd: false,
+    },
+    { upsert: true, new: true },
+  );
+
+  return subscription;
+};
+
 export const SubscriptionService = {
   getPlans,
   getUserSubscription,
   createCheckoutSession,
   createPortalSession,
   cancelSubscription,
+  verifyCheckoutSession,
 };

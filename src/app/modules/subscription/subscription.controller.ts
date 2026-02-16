@@ -63,10 +63,24 @@ const cancelSubscription = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const verifyCheckout = catchAsync(async (req: Request, res: Response) => {
+  const result = await SubscriptionService.verifyCheckoutSession(
+    req.user.userId,
+    req.body.sessionId,
+  );
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Subscription verified and synced',
+    data: result,
+  });
+});
+
 export const SubscriptionController = {
   getPlans,
   getUserSubscription,
   createCheckoutSession,
   createPortalSession,
   cancelSubscription,
+  verifyCheckout,
 };
