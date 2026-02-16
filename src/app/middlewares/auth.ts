@@ -70,9 +70,20 @@ const auth = (...requiredRoles: TUserRole[]) => {
         }
       }
 
-      // Check if user is deleted
+      // Handle soft-deleted users
       if (user.isDeleted) {
-        throw new AppError(httpStatus.FORBIDDEN, 'This user is deleted!');
+        // Only allow re-registration through the /sync endpoint
+        if (req.path === '/sync') {
+          // Reset as a fresh account on explicit re-registration
+          user.isDeleted = false;
+          user.status = 'active';
+          user.role = 'client';
+          user.deletedAt = undefined as any;
+          await user.save();
+        } else {
+          // Block deleted users on all other requests
+          throw new AppError(httpStatus.FORBIDDEN, 'This account has been deleted. Please sign out and register again.');
+        }
       }
 
       // Check if user is blocked

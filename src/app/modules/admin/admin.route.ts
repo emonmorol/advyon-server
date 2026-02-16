@@ -56,10 +56,10 @@ router.patch(
   AdminController.updateUserStatus,
 );
 
-/** DELETE /admin/users/:id — Soft delete user (superAdmin only) */
+/** DELETE /admin/users/:id — Soft delete user */
 router.delete(
   '/users/:id',
-  auth('superAdmin'),
+  auth('admin', 'superAdmin'),
   validateRequest(deleteUserParamsSchema),
   AdminController.softDeleteUser,
 );
@@ -69,7 +69,7 @@ router.delete(
 /** POST /admin/users/bulk — Bulk activate/block/delete users */
 router.post(
   '/users/bulk',
-  auth('superAdmin'),
+  auth('admin', 'superAdmin'),
   validateRequest(bulkUpdateUsersSchema),
   AdminController.bulkUpdateUsers,
 );
@@ -92,10 +92,10 @@ router.get(
   AdminController.getSystemSettings,
 );
 
-/** PATCH /admin/settings — Update system settings (superAdmin only) */
+/** PATCH /admin/settings — Update system settings */
 router.patch(
   '/settings',
-  auth('superAdmin'),
+  auth('admin', 'superAdmin'),
   validateRequest(updateSystemSettingsSchema),
   AdminController.updateSystemSettings,
 );
