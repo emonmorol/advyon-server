@@ -1,3 +1,6 @@
+import httpStatus from 'http-status';
+import { Types } from 'mongoose';
+import { ModerationReview } from './community.moderation.model';
 import { CommunityModerationService } from './community.moderation.service';
 
 describe('CommunityModerationService.runFastGate', () => {
@@ -31,3 +34,32 @@ describe('CommunityModerationService.runFastGate', () => {
   });
 });
 
+describe('CommunityModerationService.createAppeal', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('blocks appeal creation for non-owner users', async () => {
+    const targetId = new Types.ObjectId().toString();
+    const review = {
+      _id: new Types.ObjectId(),
+      status: 'review',
+      authorId: 'content-owner',
+    };
+
+    jest.spyOn(ModerationReview, 'findOne').mockReturnValue({
+      sort: jest.fn().mockResolvedValue(review),
+    } as any);
+
+    await expect(
+      CommunityModerationService.createAppeal({
+        targetType: 'thread',
+        targetId,
+        authorId: 'another-user',
+        reason: 'I believe this moderation result should be reconsidered.',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: httpStatus.FORBIDDEN,
+    });
+  });
+});

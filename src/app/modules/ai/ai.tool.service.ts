@@ -134,7 +134,12 @@ const runTool = async (params: {
 
   try {
     const prompt = buildToolPrompt(params.toolKey, safeInput);
-    const output = await AIService.chatWithAI(prompt, context.contextPrompt, context.history);
+    const output = await AIService.chatWithAI(
+      prompt,
+      context.contextPrompt,
+      context.history,
+      { throwOnFailure: true },
+    );
     AIContextManagerService.appendAssistantMessage(context.memoryKey, output);
 
     const record = await AIToolHistoryModel.create({
@@ -312,6 +317,7 @@ const getUsageMetrics = async (params: {
       completionRate: number;
     }
   > = {};
+  const latencyAccumulator: Record<string, number> = {};
 
   grouped.forEach((item) => {
     const toolKey = item?._id?.toolKey || 'unknown';
@@ -328,17 +334,19 @@ const getUsageMetrics = async (params: {
         avgLatencyMs: 0,
         completionRate: 0,
       };
+      latencyAccumulator[toolKey] = 0;
     }
 
     byTool[toolKey].total += count;
     if (status === 'success') byTool[toolKey].success += count;
     if (status === 'blocked') byTool[toolKey].blocked += count;
     if (status === 'failed') byTool[toolKey].failed += count;
-    byTool[toolKey].avgLatencyMs = Math.max(byTool[toolKey].avgLatencyMs, latency);
+    latencyAccumulator[toolKey] += latency * count;
   });
 
   Object.keys(byTool).forEach((toolKey) => {
     const tool = byTool[toolKey];
+    tool.avgLatencyMs = tool.total ? Number((latencyAccumulator[toolKey] / tool.total).toFixed(2)) : 0;
     tool.completionRate = tool.total ? Number((tool.success / tool.total).toFixed(4)) : 0;
   });
 
