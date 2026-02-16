@@ -9,7 +9,8 @@ const trackCommunityEvent = async (params: {
     | 'thread_vote'
     | 'reply_vote'
     | 'thread_search'
-    | 'thread_view';
+    | 'thread_view'
+    | 'thread_resolved';
   threadId?: string;
   replyId?: string;
   metadata?: Record<string, unknown>;
@@ -80,4 +81,3 @@ export const CommunityKPIService = {
   trackCommunityEvent,
   getEngagementMetrics,
 };
-

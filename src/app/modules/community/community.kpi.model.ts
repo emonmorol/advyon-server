@@ -6,7 +6,8 @@ export type TCommunityEngagementEventType =
   | 'thread_vote'
   | 'reply_vote'
   | 'thread_search'
-  | 'thread_view';
+  | 'thread_view'
+  | 'thread_resolved';
 
 type TCommunityEngagementEvent = {
   userId?: string;
@@ -30,6 +31,7 @@ const communityEngagementSchema = new Schema<TCommunityEngagementEvent>(
         'reply_vote',
         'thread_search',
         'thread_view',
+        'thread_resolved',
       ],
       required: true,
       index: true,
@@ -47,4 +49,3 @@ export const CommunityEngagementEventModel = model<TCommunityEngagementEvent>(
   'CommunityEngagementEvent',
   communityEngagementSchema,
 );
-

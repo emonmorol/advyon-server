@@ -436,6 +436,13 @@ const markAsSolved = async (threadId: string, replyId: string, userId: string) =
     }
   }
 
+  void CommunityKPIService.trackCommunityEvent({
+    userId,
+    eventType: 'thread_resolved',
+    threadId,
+    replyId,
+  });
+
   return { thread, reply };
 };
 
