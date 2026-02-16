@@ -51,4 +51,12 @@ export const AIValidation = {
       format: z.enum(['json', 'csv']).optional(),
     }),
   }),
+
+  toolMetricsValidation: z.object({
+    query: z.object({
+      toolKey: z.enum(AI_TOOL_KEYS).optional(),
+      from: z.string().optional(),
+      to: z.string().optional(),
+    }),
+  }),
 };

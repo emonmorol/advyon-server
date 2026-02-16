@@ -270,9 +270,84 @@ const exportHistory = async (params: {
   };
 };
 
+const getUsageMetrics = async (params: {
+  toolKey?: string;
+  from?: string;
+  to?: string;
+}) => {
+  const match: Record<string, unknown> = {};
+  if (params.toolKey && isValidToolKey(params.toolKey)) {
+    match.toolKey = params.toolKey;
+  }
+
+  if (params.from || params.to) {
+    const createdAt: Record<string, Date> = {};
+    if (params.from) createdAt.$gte = new Date(params.from);
+    if (params.to) createdAt.$lte = new Date(params.to);
+    match.createdAt = createdAt;
+  }
+
+  const grouped = await AIToolHistoryModel.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: {
+          toolKey: '$toolKey',
+          status: '$status',
+        },
+        count: { $sum: 1 },
+        avgLatencyMs: { $avg: '$latencyMs' },
+      },
+    },
+  ]);
+
+  const byTool: Record<
+    string,
+    {
+      total: number;
+      success: number;
+      blocked: number;
+      failed: number;
+      avgLatencyMs: number;
+      completionRate: number;
+    }
+  > = {};
+
+  grouped.forEach((item) => {
+    const toolKey = item?._id?.toolKey || 'unknown';
+    const status = item?._id?.status || 'unknown';
+    const count = Number(item?.count || 0);
+    const latency = Number(item?.avgLatencyMs || 0);
+
+    if (!byTool[toolKey]) {
+      byTool[toolKey] = {
+        total: 0,
+        success: 0,
+        blocked: 0,
+        failed: 0,
+        avgLatencyMs: 0,
+        completionRate: 0,
+      };
+    }
+
+    byTool[toolKey].total += count;
+    if (status === 'success') byTool[toolKey].success += count;
+    if (status === 'blocked') byTool[toolKey].blocked += count;
+    if (status === 'failed') byTool[toolKey].failed += count;
+    byTool[toolKey].avgLatencyMs = Math.max(byTool[toolKey].avgLatencyMs, latency);
+  });
+
+  Object.keys(byTool).forEach((toolKey) => {
+    const tool = byTool[toolKey];
+    tool.completionRate = tool.total ? Number((tool.success / tool.total).toFixed(4)) : 0;
+  });
+
+  return byTool;
+};
+
 export const AIToolService = {
   runTool,
   getHistory,
   exportHistory,
+  getUsageMetrics,
 };
-

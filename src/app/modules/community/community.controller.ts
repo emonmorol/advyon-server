@@ -266,6 +266,20 @@ const getLegalReferenceSuggestions = catchAsync(async (req, res) => {
   });
 });
 
+const getEngagementMetrics = catchAsync(async (req, res) => {
+  const result = await CommunityService.getEngagementMetrics({
+    from: req.query.from as string | undefined,
+    to: req.query.to as string | undefined,
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Community engagement metrics retrieved',
+    data: result,
+  });
+});
+
 export const CommunityController = {
   createThread,
   getAllThreads,
@@ -287,4 +301,5 @@ export const CommunityController = {
   getThreadAISummary,
   getAnswerSuggestion,
   getLegalReferenceSuggestions,
+  getEngagementMetrics,
 };

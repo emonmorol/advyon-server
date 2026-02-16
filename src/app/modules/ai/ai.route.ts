@@ -26,6 +26,12 @@ router.get(
   validateRequest(AIValidation.exportToolHistoryValidation),
   AIController.exportToolHistory,
 );
+router.get(
+  '/tools/metrics',
+  auth('lawyer', 'admin', 'superAdmin'),
+  validateRequest(AIValidation.toolMetricsValidation),
+  AIController.getToolMetrics,
+);
 
 // Route for manual AI analysis trigger (matching client useAIStore logic)
 // POST /ai/documents/analyze { documentId: "..." }

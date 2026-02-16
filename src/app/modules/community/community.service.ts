@@ -5,6 +5,7 @@ import { GamificationService } from '../gamification/gamification.service';
 import { User } from '../user/user.model';
 import { CommunityAIAssistService } from './community.ai-assist.service';
 import { TReply, TThread } from './community.interface';
+import { CommunityKPIService } from './community.kpi.service';
 import { Thread, Reply } from './community.model';
 import { CommunityModerationService } from './community.moderation.service';
 
@@ -58,6 +59,16 @@ const createThread = async (payload: TThread & { author: string }) => {
     );
   }
 
+  void CommunityKPIService.trackCommunityEvent({
+    userId: payload.author,
+    eventType: 'thread_create',
+    threadId: result._id.toString(),
+    metadata: {
+      moderatedStatus: assessment.decision,
+      category: payload.category,
+    },
+  });
+
   const refreshedResult = await Thread.findById(result._id);
   return refreshedResult || result;
 };
@@ -78,6 +89,13 @@ const getAllThreads = async (query: Record<string, unknown>) => {
   });
 
   if (query.searchTerm) {
+    void CommunityKPIService.trackCommunityEvent({
+      eventType: 'thread_search',
+      metadata: {
+        searchTerm: String(query.searchTerm).slice(0, 100),
+      },
+    });
+
     pipeline.push({
       $match: {
         $or: [
@@ -238,6 +256,11 @@ const getThreadById = async (id: string) => {
     .populate('author', 'fullName role avatarUrl')
     .sort({ createdAt: 1 });
 
+  void CommunityKPIService.trackCommunityEvent({
+    eventType: 'thread_view',
+    threadId: id,
+  });
+
   return { thread, replies };
 };
 
@@ -273,6 +296,16 @@ const addReply = async (payload: TReply & { author: string }) => {
     await Thread.findByIdAndUpdate(payload.threadId, { $inc: { repliesCount: 1 } });
     GamificationService.awardPoints(payload.author, 'ADD_REPLY', result._id.toString());
   }
+
+  void CommunityKPIService.trackCommunityEvent({
+    userId: payload.author,
+    eventType: 'reply_create',
+    threadId: String(payload.threadId),
+    replyId: result._id.toString(),
+    metadata: {
+      moderatedStatus: assessment.decision,
+    },
+  });
 
   const refreshedResult = await Reply.findById(result._id);
   return refreshedResult || result;
@@ -310,6 +343,14 @@ const voteThread = async (
 
   thread.upvotesCount = thread.upvotes.length;
   await thread.save();
+
+  void CommunityKPIService.trackCommunityEvent({
+    userId,
+    eventType: 'thread_vote',
+    threadId,
+    metadata: { direction },
+  });
+
   return thread;
 };
 
@@ -353,6 +394,14 @@ const voteReply = async (
       GamificationService.deductPoints(replyAuthor.id, 'DOWNVOTE_RECEIVED', replyId);
     }
   }
+
+  void CommunityKPIService.trackCommunityEvent({
+    userId,
+    eventType: 'reply_vote',
+    replyId,
+    threadId: reply.threadId.toString(),
+    metadata: { direction },
+  });
 
   return reply;
 };
@@ -516,6 +565,9 @@ const getLegalReferenceSuggestions = async (payload: {
   content: string;
 }) => CommunityAIAssistService.recommendLegalReferences(payload);
 
+const getEngagementMetrics = async (query: { from?: string; to?: string }) =>
+  CommunityKPIService.getEngagementMetrics(query);
+
 export const CommunityService = {
   createThread,
   getAllThreads,
@@ -537,4 +589,5 @@ export const CommunityService = {
   getThreadAISummary,
   getAnswerSuggestion,
   getLegalReferenceSuggestions,
+  getEngagementMetrics,
 };

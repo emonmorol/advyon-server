@@ -104,9 +104,25 @@ const exportToolHistory = catchAsync(async (req: Request, res: Response) => {
   return res.status(200).send(exportData.body);
 });
 
+const getToolMetrics = catchAsync(async (req: Request, res: Response) => {
+  const result = await AIToolService.getUsageMetrics({
+    toolKey: req.query.toolKey as string | undefined,
+    from: req.query.from as string | undefined,
+    to: req.query.to as string | undefined,
+  });
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'AI tool usage metrics retrieved',
+    data: result,
+  });
+});
+
 export const AIController = {
   chatWithAI,
   runTool,
   getToolHistory,
   exportToolHistory,
+  getToolMetrics,
 };

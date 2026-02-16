@@ -14,6 +14,12 @@ router.get('/trending-topics', CommunityController.getTrendingTopics);
 
 // Top contributors endpoint (public)
 router.get('/top-contributors', CommunityController.getTopContributors);
+router.get(
+  '/metrics/engagement',
+  auth('lawyer', 'admin', 'superAdmin'),
+  validateRequest(CommunityValidation.engagementMetricsValidation),
+  CommunityController.getEngagementMetrics,
+);
 
 // Community AI assistance (non-blocking helper endpoints)
 router.post(

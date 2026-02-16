@@ -136,4 +136,11 @@ export const CommunityValidation = {
       content: z.string().trim().min(10).max(5000),
     }),
   }),
+
+  engagementMetricsValidation: z.object({
+    query: z.object({
+      from: z.string().optional(),
+      to: z.string().optional(),
+    }),
+  }),
 };
