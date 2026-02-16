@@ -105,7 +105,7 @@ export const CommunityValidation = {
   similarThreadsValidation: z.object({
     body: z.object({
       title: z.string().trim().min(5).max(180),
-      content: z.string().trim().min(10).max(5000),
+      content: z.string().trim().min(5).max(5000),
       threadId: z.string().trim().optional(),
       limit: z.number().int().min(1).max(10).optional(),
     }),
@@ -114,7 +114,7 @@ export const CommunityValidation = {
   smartTagValidation: z.object({
     body: z.object({
       title: z.string().trim().min(5).max(180),
-      content: z.string().trim().min(10).max(5000),
+      content: z.string().trim().min(5).max(5000),
     }),
   }),
 

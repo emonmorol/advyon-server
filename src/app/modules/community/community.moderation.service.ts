@@ -53,10 +53,33 @@ const TOXICITY_HINTS = [
   'worthless',
 ];
 
+const COLLAPSED_TOXICITY_HINTS = [
+  'fuckyou',
+  'motherfucker',
+  'pieceofshit',
+  'killyourself',
+  'godie',
+  'asshole',
+  'bitch',
+  'moron',
+  'idiot',
+  'shutup',
+];
+
+const TOXICITY_REGEX_HINTS: RegExp[] = [
+  /\bf[\W_]*(?:u|\*)[\W_]*c[\W_]*k(?:[\W_]*i[\W_]*n[\W_]*g)?\b/i,
+  /\ba[\W_]*s[\W_]*s[\W_]*h[\W_]*o[\W_]*l[\W_]*e\b/i,
+  /\bb[\W_]*i[\W_]*t[\W_]*c[\W_]*h\b/i,
+  /\bm[\W_]*o[\W_]*r[\W_]*o[\W_]*n\b/i,
+  /\bi[\W_]*d[\W_]*i[\W_]*o[\W_]*t\b/i,
+];
+
 const SEVERE_TOXICITY_PATTERNS: RegExp[] = [
   /\bfuck\s+you\b/i,
+  /\bf[\W_]*(?:u|\*)[\W_]*c[\W_]*k[\W_]*y[\W_]*o[\W_]*u\b/i,
   /\bgo\s+die\b/i,
   /\bkill\s+yourself\b/i,
+  /\bk[\W_]*i[\W_]*l[\W_]*l[\W_]*y[\W_]*o[\W_]*u[\W_]*r[\W_]*s[\W_]*e[\W_]*l[\W_]*f\b/i,
   /\bpiece\s+of\s+shit\b/i,
   /\bshut\s+the\s+fuck\s+up\b/i,
 ];
@@ -106,7 +129,12 @@ const calculateOffTopicScore = (content: string): number => {
 
 const calculateKeywordToxicityScore = (content: string): number => {
   const text = content.toLowerCase();
+  const collapsedText = text.replace(/[^a-z0-9]+/g, '');
   const hitCount = TOXICITY_HINTS.filter(keyword => text.includes(keyword)).length;
+  const collapsedHitCount = COLLAPSED_TOXICITY_HINTS.filter(keyword =>
+    collapsedText.includes(keyword),
+  ).length;
+  const regexHitCount = TOXICITY_REGEX_HINTS.filter(pattern => pattern.test(text)).length;
   const severeHits = SEVERE_TOXICITY_PATTERNS.filter(pattern =>
     pattern.test(text),
   ).length;
@@ -116,7 +144,7 @@ const calculateKeywordToxicityScore = (content: string): number => {
   const aggressivePatternHits = text.match(/(!{3,}|[A-Z]{5,})/g)?.length || 0;
 
   const severeWeight = severeHits > 0 ? 0.95 : 0;
-  const keywordWeight = hitCount * 0.28;
+  const keywordWeight = hitCount * 0.22 + collapsedHitCount * 0.22 + regexHitCount * 0.24;
   const personalAttackWeight = personalAttackHits * 0.3;
   const aggressionWeight = aggressivePatternHits * 0.08;
 
