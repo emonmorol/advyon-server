@@ -1,74 +1,45 @@
 import { Request, Response } from 'express';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
+import { AIContextManagerService } from './ai-context-manager.service';
 import { AIService } from './ai.service';
-import { DocumentModel } from '../document/document.model';
-import { Case as CaseModel } from '../case/case.model';
-import { sanitizeUserGeneratedText } from './input-sanitizer';
 
 const chatWithAI = catchAsync(async (req: Request, res: Response) => {
   const { message, documentId, documentIds, caseId, history } = req.body;
-  const safeMessage = sanitizeUserGeneratedText(message || '');
-  const safeHistory = Array.isArray(history)
-    ? history
-        .filter(item => item && (item.role === 'user' || item.role === 'assistant'))
-        .map(item => ({
-          role: item.role,
-          content: sanitizeUserGeneratedText(item.content || ''),
-        }))
-    : [];
 
-  let context = '';
+  const preparedContext = await AIContextManagerService.prepareContext({
+    userId: req.user.userId,
+    message,
+    documentId,
+    documentIds,
+    caseId,
+    history,
+  });
 
-  // 1. Document Context (Single or Multiple)
-  const targetDocIds = [];
-  if (Array.isArray(documentIds) && documentIds.length > 0) {
-      targetDocIds.push(...documentIds);
-  } else if (documentId) {
-      targetDocIds.push(documentId);
+  if (!preparedContext.allowed) {
+    return sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'AI request rejected by policy guardrails',
+      data: {
+        response:
+          preparedContext.rejectionMessage ||
+          'I can only assist with legal and platform-related questions.',
+        policySignals: preparedContext.policySignals,
+      },
+    });
   }
 
-  if (targetDocIds.length > 0) {
-      const documents = await DocumentModel.find({ id: { $in: targetDocIds } });
-      
-      documents.forEach(document => {
-          context += `
-          FOCUS DOCUMENT:
-          Title: ${sanitizeUserGeneratedText(document.fileName)}
-          Type: ${sanitizeUserGeneratedText(document.fileType)}
-          Summary: ${sanitizeUserGeneratedText(document.aiAnalysis?.summary || 'No summary available')}
-          Key Points: ${sanitizeUserGeneratedText(document.aiAnalysis?.keyPoints?.join('\n') || 'None')}
-          Category: ${sanitizeUserGeneratedText(document.aiAnalysis?.documentCategory || 'Unknown')}
-          `;
-      });
-  }
+  const response = await AIService.chatWithAI(
+    preparedContext.sanitizedMessage,
+    preparedContext.contextPrompt,
+    preparedContext.history,
+  );
 
-  // 2. Case Context (Mid Level) - appended to document context or stands alone
-  if (caseId) {
-      const caseData = await CaseModel.findOne({ id: caseId });
-      if (caseData) {
-          context += `
-          CURRENT CASE CONTEXT:
-          Case Name: ${sanitizeUserGeneratedText(caseData.title)}
-          Case Number: ${sanitizeUserGeneratedText(caseData.caseNumber)}
-          Status: ${sanitizeUserGeneratedText(caseData.status)}
-          Type: ${sanitizeUserGeneratedText(caseData.caseType)}
-          Urgency: ${sanitizeUserGeneratedText(caseData.urgency)}
-          `;
-      }
-  }
-
-
-  // 3. Global Context (Fallback/Base) - If no specific context, AI acts as general support
-  if (!context) {
-      context = `
-      You are Advyon AI, a helpful legal assistant for the Advyon Legal Platform.
-      You are currently in the general dashboard or have no specific case context.
-      Help the user with general legal questions, navigating the platform, or creating new cases.
-      `;
-  }
-
-  const response = await AIService.chatWithAI(safeMessage, context, safeHistory);
+  AIContextManagerService.appendAssistantMessage(
+    preparedContext.memoryKey,
+    response,
+  );
 
   sendResponse(res, {
     statusCode: 200,
@@ -81,3 +52,4 @@ const chatWithAI = catchAsync(async (req: Request, res: Response) => {
 export const AIController = {
   chatWithAI,
 };
+
