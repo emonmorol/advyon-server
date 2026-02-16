@@ -4,9 +4,19 @@ import sendResponse from '../../utils/sendResponse';
 import { AIService } from './ai.service';
 import { DocumentModel } from '../document/document.model';
 import { Case as CaseModel } from '../case/case.model';
+import { sanitizeUserGeneratedText } from './input-sanitizer';
 
 const chatWithAI = catchAsync(async (req: Request, res: Response) => {
   const { message, documentId, documentIds, caseId, history } = req.body;
+  const safeMessage = sanitizeUserGeneratedText(message || '');
+  const safeHistory = Array.isArray(history)
+    ? history
+        .filter(item => item && (item.role === 'user' || item.role === 'assistant'))
+        .map(item => ({
+          role: item.role,
+          content: sanitizeUserGeneratedText(item.content || ''),
+        }))
+    : [];
 
   let context = '';
 
@@ -24,11 +34,11 @@ const chatWithAI = catchAsync(async (req: Request, res: Response) => {
       documents.forEach(document => {
           context += `
           FOCUS DOCUMENT:
-          Title: ${document.fileName}
-          Type: ${document.fileType}
-          Summary: ${document.aiAnalysis?.summary || 'No summary available'}
-          Key Points: ${document.aiAnalysis?.keyPoints?.join('\n') || 'None'}
-          Category: ${document.aiAnalysis?.documentCategory || 'Unknown'}
+          Title: ${sanitizeUserGeneratedText(document.fileName)}
+          Type: ${sanitizeUserGeneratedText(document.fileType)}
+          Summary: ${sanitizeUserGeneratedText(document.aiAnalysis?.summary || 'No summary available')}
+          Key Points: ${sanitizeUserGeneratedText(document.aiAnalysis?.keyPoints?.join('\n') || 'None')}
+          Category: ${sanitizeUserGeneratedText(document.aiAnalysis?.documentCategory || 'Unknown')}
           `;
       });
   }
@@ -39,11 +49,11 @@ const chatWithAI = catchAsync(async (req: Request, res: Response) => {
       if (caseData) {
           context += `
           CURRENT CASE CONTEXT:
-          Case Name: ${caseData.title}
-          Case Number: ${caseData.caseNumber}
-          Status: ${caseData.status}
-          Type: ${caseData.caseType}
-          Urgency: ${caseData.urgency}
+          Case Name: ${sanitizeUserGeneratedText(caseData.title)}
+          Case Number: ${sanitizeUserGeneratedText(caseData.caseNumber)}
+          Status: ${sanitizeUserGeneratedText(caseData.status)}
+          Type: ${sanitizeUserGeneratedText(caseData.caseType)}
+          Urgency: ${sanitizeUserGeneratedText(caseData.urgency)}
           `;
       }
   }
@@ -58,7 +68,7 @@ const chatWithAI = catchAsync(async (req: Request, res: Response) => {
       `;
   }
 
-  const response = await AIService.chatWithAI(message, context, history);
+  const response = await AIService.chatWithAI(safeMessage, context, safeHistory);
 
   sendResponse(res, {
     statusCode: 200,

@@ -4,11 +4,18 @@ import sendResponse from '../../utils/sendResponse';
 import { CommunityService } from './community.service';
 
 const createThread = catchAsync(async (req, res) => {
-  const result = await CommunityService.createThread({ ...req.body, author: req.user.userId });
+  const result = await CommunityService.createThread({
+    ...req.body,
+    author: req.user.userId,
+  });
+
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
-    message: 'Thread created successfully',
+    message:
+      result?.isVisible === false
+        ? 'Thread submitted for moderation review'
+        : 'Thread created successfully',
     data: result,
   });
 });
@@ -35,46 +42,69 @@ const getThreadById = catchAsync(async (req, res) => {
 });
 
 const addReply = catchAsync(async (req, res) => {
-  const result = await CommunityService.addReply({ ...req.body, threadId: req.params.threadId, author: req.user.userId });
+  const result = await CommunityService.addReply({
+    ...req.body,
+    threadId: req.params.threadId,
+    author: req.user.userId,
+  });
+
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
-    message: 'Reply added successfully',
+    message:
+      result?.isVisible === false
+        ? 'Reply submitted for moderation review'
+        : 'Reply added successfully',
     data: result,
   });
 });
 
 const voteThread = catchAsync(async (req, res) => {
-  const direction = req.body.direction || 'up'; // default to up
-  const result = await CommunityService.voteThread(req.params.id, req.user.userId, direction);
+  const direction = req.body.direction || 'up';
+  const result = await CommunityService.voteThread(
+    req.params.id,
+    req.user.userId,
+    direction,
+  );
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Vote updated',
-    data: result
-  })
-})
+    data: result,
+  });
+});
 
 const voteReply = catchAsync(async (req, res) => {
-  const direction = req.body.direction || 'up'; // default to up
-  const result = await CommunityService.voteReply(req.params.replyId, req.user.userId, direction);
+  const direction = req.body.direction || 'up';
+  const result = await CommunityService.voteReply(
+    req.params.replyId,
+    req.user.userId,
+    direction,
+  );
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Reply vote updated',
-    data: result
-  })
-})
+    data: result,
+  });
+});
 
 const markAsSolved = catchAsync(async (req, res) => {
-  const result = await CommunityService.markAsSolved(req.params.id, req.body.replyId, req.user.userId);
+  const result = await CommunityService.markAsSolved(
+    req.params.id,
+    req.body.replyId,
+    req.user.userId,
+  );
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Thread marked as solved',
-    data: result
-  })
-})
+    data: result,
+  });
+});
 
 const getCommunityStats = catchAsync(async (req, res) => {
   const result = await CommunityService.getCommunityStats();
@@ -82,9 +112,9 @@ const getCommunityStats = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Community stats retrieved',
-    data: result
-  })
-})
+    data: result,
+  });
+});
 
 const getTrendingTopics = catchAsync(async (req, res) => {
   const limit = Number(req.query.limit) || 10;
@@ -93,9 +123,9 @@ const getTrendingTopics = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Trending topics retrieved',
-    data: result
-  })
-})
+    data: result,
+  });
+});
 
 const getTopContributors = catchAsync(async (req, res) => {
   const limit = Number(req.query.limit) || 10;
@@ -104,9 +134,77 @@ const getTopContributors = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Top contributors retrieved',
-    data: result
-  })
-})
+    data: result,
+  });
+});
+
+const getModerationQueue = catchAsync(async (req, res) => {
+  const result = await CommunityService.getModerationQueue(req.query);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Moderation queue retrieved',
+    meta: result.meta,
+    data: result.result,
+  });
+});
+
+const reviewModerationItem = catchAsync(async (req, res) => {
+  const result = await CommunityService.reviewModerationItem(
+    req.params.reviewId,
+    req.user.userId,
+    req.body.decision,
+    req.body.notes,
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Moderation decision recorded',
+    data: result,
+  });
+});
+
+const createModerationAppeal = catchAsync(async (req, res) => {
+  const result = await CommunityService.createModerationAppeal({
+    ...req.body,
+    authorId: req.user.userId,
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'Appeal submitted successfully',
+    data: result,
+  });
+});
+
+const getModerationAppeals = catchAsync(async (req, res) => {
+  const result = await CommunityService.getModerationAppeals(req.query);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Appeals retrieved',
+    meta: result.meta,
+    data: result.result,
+  });
+});
+
+const resolveModerationAppeal = catchAsync(async (req, res) => {
+  const result = await CommunityService.resolveModerationAppeal(
+    req.params.appealId,
+    req.user.userId,
+    req.body.decision,
+    req.body.notes,
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Appeal resolved',
+    data: result,
+  });
+});
 
 export const CommunityController = {
   createThread,
@@ -119,4 +217,10 @@ export const CommunityController = {
   getCommunityStats,
   getTrendingTopics,
   getTopContributors,
+  getModerationQueue,
+  reviewModerationItem,
+  createModerationAppeal,
+  getModerationAppeals,
+  resolveModerationAppeal,
 };
+
