@@ -3,6 +3,7 @@ import AppError from '../../errors/appError';
 import { sanitizeTagList, sanitizeUserGeneratedText } from '../ai/input-sanitizer';
 import { GamificationService } from '../gamification/gamification.service';
 import { User } from '../user/user.model';
+import { CommunityAIAssistService } from './community.ai-assist.service';
 import { TReply, TThread } from './community.interface';
 import { Thread, Reply } from './community.model';
 import { CommunityModerationService } from './community.moderation.service';
@@ -489,6 +490,32 @@ const resolveModerationAppeal = async (
     notes,
   );
 
+const getSimilarThreadSuggestions = async (payload: {
+  title: string;
+  content: string;
+  threadId?: string;
+  limit?: number;
+}) => CommunityAIAssistService.findSimilarThreads(payload);
+
+const getSmartTagSuggestions = async (payload: {
+  title: string;
+  content: string;
+}) => CommunityAIAssistService.suggestSmartTags(payload.title, payload.content);
+
+const getThreadAISummary = async (threadId: string, userId: string) =>
+  CommunityAIAssistService.summarizeThread({ threadId, userId });
+
+const getAnswerSuggestion = async (payload: {
+  userId: string;
+  threadId?: string;
+  draft?: string;
+}) => CommunityAIAssistService.generateAnswerSuggestion(payload);
+
+const getLegalReferenceSuggestions = async (payload: {
+  userId: string;
+  content: string;
+}) => CommunityAIAssistService.recommendLegalReferences(payload);
+
 export const CommunityService = {
   createThread,
   getAllThreads,
@@ -505,5 +532,9 @@ export const CommunityService = {
   createModerationAppeal,
   getModerationAppeals,
   resolveModerationAppeal,
+  getSimilarThreadSuggestions,
+  getSmartTagSuggestions,
+  getThreadAISummary,
+  getAnswerSuggestion,
+  getLegalReferenceSuggestions,
 };
-

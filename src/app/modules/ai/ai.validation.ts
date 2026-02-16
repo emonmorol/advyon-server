@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AI_TOOL_KEYS } from './ai.tool.interface';
 
 const chatHistoryItemSchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -21,5 +22,33 @@ export const AIValidation = {
       documentId: z.string().trim().min(1),
     }),
   }),
-};
 
+  runToolValidation: z.object({
+    params: z.object({
+      toolKey: z.enum(AI_TOOL_KEYS),
+    }),
+    body: z.object({
+      input: z.string().trim().min(1).max(8000),
+      caseId: z.string().trim().optional(),
+      documentId: z.string().trim().optional(),
+      documentIds: z.array(z.string().trim().min(1)).max(10).optional(),
+      history: z.array(chatHistoryItemSchema).max(20).optional().default([]),
+    }),
+  }),
+
+  toolHistoryValidation: z.object({
+    query: z.object({
+      toolKey: z.enum(AI_TOOL_KEYS).optional(),
+      status: z.enum(['success', 'blocked', 'failed']).optional(),
+      page: z.string().optional(),
+      limit: z.string().optional(),
+    }),
+  }),
+
+  exportToolHistoryValidation: z.object({
+    query: z.object({
+      toolKey: z.enum(AI_TOOL_KEYS).optional(),
+      format: z.enum(['json', 'csv']).optional(),
+    }),
+  }),
+};

@@ -15,6 +15,35 @@ router.get('/trending-topics', CommunityController.getTrendingTopics);
 // Top contributors endpoint (public)
 router.get('/top-contributors', CommunityController.getTopContributors);
 
+// Community AI assistance (non-blocking helper endpoints)
+router.post(
+  '/assist/similar',
+  auth('client', 'lawyer', 'admin'),
+  validateRequest(CommunityValidation.similarThreadsValidation),
+  CommunityController.getSimilarThreadSuggestions,
+);
+
+router.post(
+  '/assist/smart-tags',
+  auth('client', 'lawyer', 'admin'),
+  validateRequest(CommunityValidation.smartTagValidation),
+  CommunityController.getSmartTagSuggestions,
+);
+
+router.post(
+  '/assist/answer-suggestion',
+  auth('client', 'lawyer', 'admin'),
+  validateRequest(CommunityValidation.answerSuggestionValidation),
+  CommunityController.getAnswerSuggestion,
+);
+
+router.post(
+  '/assist/legal-references',
+  auth('client', 'lawyer', 'admin'),
+  validateRequest(CommunityValidation.legalReferenceValidation),
+  CommunityController.getLegalReferenceSuggestions,
+);
+
 // Moderation workflow endpoints
 router.get(
   '/moderation/reviews',
@@ -59,6 +88,12 @@ router.post(
   CommunityController.createThread,
 );
 router.get('/threads', CommunityController.getAllThreads);
+router.get(
+  '/threads/:id/summary-ai',
+  auth('client', 'lawyer', 'admin'),
+  validateRequest(CommunityValidation.threadSummaryValidation),
+  CommunityController.getThreadAISummary,
+);
 router.get('/threads/:id', CommunityController.getThreadById);
 router.post(
   '/threads/:threadId/reply',
@@ -88,4 +123,3 @@ router.patch(
 );
 
 export const CommunityRoutes = router;
-
