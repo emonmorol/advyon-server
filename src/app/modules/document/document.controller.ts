@@ -496,9 +496,9 @@ const downloadDocument = catchAsync(async (req, res) => {
       throw new AppError(httpStatus.NOT_FOUND, 'Associated case not found');
     }
     const isMember =
-      caseDoc.clientId?.toString() === userId ||
-      caseDoc.lawyerId?.toString() === userId ||
-      caseDoc.members?.some((m: any) => m.toString() === userId);
+      (caseDoc as any).clientId?.toString() === userId ||
+      (caseDoc as any).lawyerId?.toString() === userId ||
+      (caseDoc as any).members?.some((m: any) => m.toString() === userId);
     if (!isMember) {
       throw new AppError(httpStatus.FORBIDDEN, 'You do not have access to this document');
     }
@@ -544,9 +544,9 @@ const batchDownload = catchAsync(async (req, res) => {
       throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
     }
     const isMember =
-      caseDoc.clientId?.toString() === userId ||
-      caseDoc.lawyerId?.toString() === userId ||
-      caseDoc.members?.some((m: any) => m.toString() === userId);
+      (caseDoc as any).clientId?.toString() === userId ||
+      (caseDoc as any).lawyerId?.toString() === userId ||
+      (caseDoc as any).members?.some((m: any) => m.toString() === userId);
     if (!isMember) {
       throw new AppError(httpStatus.FORBIDDEN, 'You do not have access to this case');
     }
