@@ -4,6 +4,16 @@ import { ModerationReview } from './community.moderation.model';
 import { CommunityModerationService } from './community.moderation.service';
 
 describe('CommunityModerationService.runFastGate', () => {
+  it('flags direct profanity attacks for review', async () => {
+    const result = await CommunityModerationService.runFastGate(
+      'fuck you and your case',
+      0.72,
+    );
+
+    expect(['flagged', 'rejected']).toContain(result.decision);
+    expect(result.reasons).toContain('toxicity');
+  });
+
   it('rejects clearly abusive content', async () => {
     const result = await CommunityModerationService.runFastGate(
       'You are an idiot and your case is trash. Shut up.',

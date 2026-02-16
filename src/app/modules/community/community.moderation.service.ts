@@ -34,6 +34,16 @@ const LEGAL_DOMAIN_HINTS = [
 const TOXICITY_HINTS = [
   'idiot',
   'stupid',
+  'fuck',
+  'fucking',
+  'bitch',
+  'asshole',
+  'bastard',
+  'motherfucker',
+  'retard',
+  'dickhead',
+  'bullshit',
+  'go to hell',
   'hate',
   'kill',
   'trash',
@@ -41,6 +51,19 @@ const TOXICITY_HINTS = [
   'moron',
   'dumb',
   'worthless',
+];
+
+const SEVERE_TOXICITY_PATTERNS: RegExp[] = [
+  /\bfuck\s+you\b/i,
+  /\bgo\s+die\b/i,
+  /\bkill\s+yourself\b/i,
+  /\bpiece\s+of\s+shit\b/i,
+  /\bshut\s+the\s+fuck\s+up\b/i,
+];
+
+const PERSONAL_ATTACK_PATTERNS: RegExp[] = [
+  /\byou\s+are\s+(an?\s+)?(idiot|moron|stupid|dumb|worthless|trash|loser)\b/i,
+  /\byour\s+(argument|case|post)\s+is\s+(trash|stupid|garbage|worthless)\b/i,
 ];
 
 let toxicityModel: any = null;
@@ -84,8 +107,20 @@ const calculateOffTopicScore = (content: string): number => {
 const calculateKeywordToxicityScore = (content: string): number => {
   const text = content.toLowerCase();
   const hitCount = TOXICITY_HINTS.filter(keyword => text.includes(keyword)).length;
+  const severeHits = SEVERE_TOXICITY_PATTERNS.filter(pattern =>
+    pattern.test(text),
+  ).length;
+  const personalAttackHits = PERSONAL_ATTACK_PATTERNS.filter(pattern =>
+    pattern.test(text),
+  ).length;
   const aggressivePatternHits = text.match(/(!{3,}|[A-Z]{5,})/g)?.length || 0;
-  return clamp01(hitCount * 0.23 + aggressivePatternHits * 0.08);
+
+  const severeWeight = severeHits > 0 ? 0.95 : 0;
+  const keywordWeight = hitCount * 0.28;
+  const personalAttackWeight = personalAttackHits * 0.3;
+  const aggressionWeight = aggressivePatternHits * 0.08;
+
+  return clamp01(Math.max(severeWeight, keywordWeight + personalAttackWeight + aggressionWeight));
 };
 
 const loadToxicityModel = async (): Promise<any> => {
@@ -164,7 +199,11 @@ const assessContent = async (
   const confidence = Math.max(toxicityScore, spamScore, offTopicScore);
   let decision: TModerationDecision = 'approved';
 
-  if (confidence >= safeThreshold + 0.12) {
+  if (toxicityScore >= 0.9) {
+    decision = 'rejected';
+  } else if (toxicityScore >= safeThreshold) {
+    decision = 'flagged';
+  } else if (confidence >= safeThreshold + 0.12) {
     decision = 'rejected';
   } else if (confidence >= safeThreshold) {
     decision = 'flagged';
