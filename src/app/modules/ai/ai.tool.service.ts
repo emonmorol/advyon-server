@@ -140,7 +140,7 @@ const runTool = async (params: {
       context.history,
       { throwOnFailure: true },
     );
-    AIContextManagerService.appendAssistantMessage(context.memoryKey, output);
+    await AIContextManagerService.appendAssistantMessage(context.memoryKey, output);
 
     const record = await AIToolHistoryModel.create({
       userId: params.userId,

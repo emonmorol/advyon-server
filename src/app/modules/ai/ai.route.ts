@@ -32,6 +32,12 @@ router.get(
   validateRequest(AIValidation.toolMetricsValidation),
   AIController.getToolMetrics,
 );
+router.get(
+  '/context/profile',
+  auth(),
+  validateRequest(AIValidation.contextProfileValidation),
+  AIController.getContextProfile,
+);
 
 // Route for manual AI analysis trigger (matching client useAIStore logic)
 // POST /ai/documents/analyze { documentId: "..." }

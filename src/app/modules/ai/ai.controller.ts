@@ -37,7 +37,7 @@ const chatWithAI = catchAsync(async (req: Request, res: Response) => {
     preparedContext.history,
   );
 
-  AIContextManagerService.appendAssistantMessage(
+  await AIContextManagerService.appendAssistantMessage(
     preparedContext.memoryKey,
     response,
   );
@@ -119,10 +119,25 @@ const getToolMetrics = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getContextProfile = catchAsync(async (req: Request, res: Response) => {
+  const result = await AIContextManagerService.getUserContextProfile(
+    req.user.userId,
+    req.query.caseId as string | undefined,
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'AI context profile retrieved',
+    data: result,
+  });
+});
+
 export const AIController = {
   chatWithAI,
   runTool,
   getToolHistory,
   exportToolHistory,
   getToolMetrics,
+  getContextProfile,
 };

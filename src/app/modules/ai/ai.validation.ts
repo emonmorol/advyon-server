@@ -59,4 +59,10 @@ export const AIValidation = {
       to: z.string().optional(),
     }),
   }),
+
+  contextProfileValidation: z.object({
+    query: z.object({
+      caseId: z.string().trim().optional(),
+    }),
+  }),
 };
