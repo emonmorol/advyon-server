@@ -3,9 +3,7 @@ import AppError from '../../errors/appError';
 import { sanitizeTagList, sanitizeUserGeneratedText } from '../ai/input-sanitizer';
 import { GamificationService } from '../gamification/gamification.service';
 import { User } from '../user/user.model';
-import { CommunityAIAssistService } from './community.ai-assist.service';
 import { TReply, TThread } from './community.interface';
-import { CommunityKPIService } from './community.kpi.service';
 import { Thread, Reply } from './community.model';
 import { CommunityModerationService } from './community.moderation.service';
 
@@ -59,16 +57,6 @@ const createThread = async (payload: TThread & { author: string }) => {
     );
   }
 
-  void CommunityKPIService.trackCommunityEvent({
-    userId: payload.author,
-    eventType: 'thread_create',
-    threadId: result._id.toString(),
-    metadata: {
-      moderatedStatus: assessment.decision,
-      category: payload.category,
-    },
-  });
-
   const refreshedResult = await Thread.findById(result._id);
   return refreshedResult || result;
 };
@@ -89,13 +77,6 @@ const getAllThreads = async (query: Record<string, unknown>) => {
   });
 
   if (query.searchTerm) {
-    void CommunityKPIService.trackCommunityEvent({
-      eventType: 'thread_search',
-      metadata: {
-        searchTerm: String(query.searchTerm).slice(0, 100),
-      },
-    });
-
     pipeline.push({
       $match: {
         $or: [
@@ -256,11 +237,6 @@ const getThreadById = async (id: string) => {
     .populate('author', 'fullName role avatarUrl')
     .sort({ createdAt: 1 });
 
-  void CommunityKPIService.trackCommunityEvent({
-    eventType: 'thread_view',
-    threadId: id,
-  });
-
   return { thread, replies };
 };
 
@@ -296,16 +272,6 @@ const addReply = async (payload: TReply & { author: string }) => {
     await Thread.findByIdAndUpdate(payload.threadId, { $inc: { repliesCount: 1 } });
     GamificationService.awardPoints(payload.author, 'ADD_REPLY', result._id.toString());
   }
-
-  void CommunityKPIService.trackCommunityEvent({
-    userId: payload.author,
-    eventType: 'reply_create',
-    threadId: String(payload.threadId),
-    replyId: result._id.toString(),
-    metadata: {
-      moderatedStatus: assessment.decision,
-    },
-  });
 
   const refreshedResult = await Reply.findById(result._id);
   return refreshedResult || result;
@@ -343,14 +309,6 @@ const voteThread = async (
 
   thread.upvotesCount = thread.upvotes.length;
   await thread.save();
-
-  void CommunityKPIService.trackCommunityEvent({
-    userId,
-    eventType: 'thread_vote',
-    threadId,
-    metadata: { direction },
-  });
-
   return thread;
 };
 
@@ -395,14 +353,6 @@ const voteReply = async (
     }
   }
 
-  void CommunityKPIService.trackCommunityEvent({
-    userId,
-    eventType: 'reply_vote',
-    replyId,
-    threadId: reply.threadId.toString(),
-    metadata: { direction },
-  });
-
   return reply;
 };
 
@@ -435,13 +385,6 @@ const markAsSolved = async (threadId: string, replyId: string, userId: string) =
       GamificationService.awardPoints(replyAuthor.id, 'ACCEPTED_ANSWER', replyId);
     }
   }
-
-  void CommunityKPIService.trackCommunityEvent({
-    userId,
-    eventType: 'thread_resolved',
-    threadId,
-    replyId,
-  });
 
   return { thread, reply };
 };
@@ -546,35 +489,6 @@ const resolveModerationAppeal = async (
     notes,
   );
 
-const getSimilarThreadSuggestions = async (payload: {
-  title: string;
-  content: string;
-  threadId?: string;
-  limit?: number;
-}) => CommunityAIAssistService.findSimilarThreads(payload);
-
-const getSmartTagSuggestions = async (payload: {
-  title: string;
-  content: string;
-}) => CommunityAIAssistService.suggestSmartTags(payload.title, payload.content);
-
-const getThreadAISummary = async (threadId: string, userId: string) =>
-  CommunityAIAssistService.summarizeThread({ threadId, userId });
-
-const getAnswerSuggestion = async (payload: {
-  userId: string;
-  threadId?: string;
-  draft?: string;
-}) => CommunityAIAssistService.generateAnswerSuggestion(payload);
-
-const getLegalReferenceSuggestions = async (payload: {
-  userId: string;
-  content: string;
-}) => CommunityAIAssistService.recommendLegalReferences(payload);
-
-const getEngagementMetrics = async (query: { from?: string; to?: string }) =>
-  CommunityKPIService.getEngagementMetrics(query);
-
 export const CommunityService = {
   createThread,
   getAllThreads,
@@ -591,10 +505,5 @@ export const CommunityService = {
   createModerationAppeal,
   getModerationAppeals,
   resolveModerationAppeal,
-  getSimilarThreadSuggestions,
-  getSmartTagSuggestions,
-  getThreadAISummary,
-  getAnswerSuggestion,
-  getLegalReferenceSuggestions,
-  getEngagementMetrics,
 };
+

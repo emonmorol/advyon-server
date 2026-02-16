@@ -8,30 +8,6 @@ import { AIValidation } from './ai.validation';
 const router = express.Router();
 
 router.post('/chat', auth(), validateRequest(AIValidation.chatValidation), AIController.chatWithAI);
-router.post(
-  '/tools/:toolKey/run',
-  auth(),
-  validateRequest(AIValidation.runToolValidation),
-  AIController.runTool,
-);
-router.get(
-  '/tools/history',
-  auth(),
-  validateRequest(AIValidation.toolHistoryValidation),
-  AIController.getToolHistory,
-);
-router.get(
-  '/tools/history/export',
-  auth(),
-  validateRequest(AIValidation.exportToolHistoryValidation),
-  AIController.exportToolHistory,
-);
-router.get(
-  '/tools/metrics',
-  auth('lawyer', 'admin', 'superAdmin'),
-  validateRequest(AIValidation.toolMetricsValidation),
-  AIController.getToolMetrics,
-);
 
 // Route for manual AI analysis trigger (matching client useAIStore logic)
 // POST /ai/documents/analyze { documentId: "..." }

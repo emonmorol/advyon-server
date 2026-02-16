@@ -206,80 +206,6 @@ const resolveModerationAppeal = catchAsync(async (req, res) => {
   });
 });
 
-const getSimilarThreadSuggestions = catchAsync(async (req, res) => {
-  const result = await CommunityService.getSimilarThreadSuggestions(req.body);
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Similar thread suggestions retrieved',
-    data: result,
-  });
-});
-
-const getSmartTagSuggestions = catchAsync(async (req, res) => {
-  const result = await CommunityService.getSmartTagSuggestions(req.body);
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Smart tag suggestions retrieved',
-    data: result,
-  });
-});
-
-const getThreadAISummary = catchAsync(async (req, res) => {
-  const result = await CommunityService.getThreadAISummary(
-    req.params.id,
-    req.user.userId,
-  );
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Thread AI summary generated',
-    data: result,
-  });
-});
-
-const getAnswerSuggestion = catchAsync(async (req, res) => {
-  const result = await CommunityService.getAnswerSuggestion({
-    userId: req.user.userId,
-    threadId: req.body.threadId,
-    draft: req.body.draft,
-  });
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'AI answer suggestion generated',
-    data: result,
-  });
-});
-
-const getLegalReferenceSuggestions = catchAsync(async (req, res) => {
-  const result = await CommunityService.getLegalReferenceSuggestions({
-    userId: req.user.userId,
-    content: req.body.content,
-  });
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Legal reference suggestions generated',
-    data: result,
-  });
-});
-
-const getEngagementMetrics = catchAsync(async (req, res) => {
-  const result = await CommunityService.getEngagementMetrics({
-    from: req.query.from as string | undefined,
-    to: req.query.to as string | undefined,
-  });
-
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Community engagement metrics retrieved',
-    data: result,
-  });
-});
-
 export const CommunityController = {
   createThread,
   getAllThreads,
@@ -296,10 +222,5 @@ export const CommunityController = {
   createModerationAppeal,
   getModerationAppeals,
   resolveModerationAppeal,
-  getSimilarThreadSuggestions,
-  getSmartTagSuggestions,
-  getThreadAISummary,
-  getAnswerSuggestion,
-  getLegalReferenceSuggestions,
-  getEngagementMetrics,
 };
+

@@ -101,46 +101,5 @@ export const CommunityValidation = {
       notes: z.string().trim().max(1000).optional(),
     }),
   }),
-
-  similarThreadsValidation: z.object({
-    body: z.object({
-      title: z.string().trim().min(5).max(180),
-      content: z.string().trim().min(10).max(5000),
-      threadId: z.string().trim().optional(),
-      limit: z.number().int().min(1).max(10).optional(),
-    }),
-  }),
-
-  smartTagValidation: z.object({
-    body: z.object({
-      title: z.string().trim().min(5).max(180),
-      content: z.string().trim().min(10).max(5000),
-    }),
-  }),
-
-  threadSummaryValidation: z.object({
-    params: z.object({
-      id: z.string().trim().min(1),
-    }),
-  }),
-
-  answerSuggestionValidation: z.object({
-    body: z.object({
-      threadId: z.string().trim().optional(),
-      draft: z.string().trim().max(5000).optional(),
-    }),
-  }),
-
-  legalReferenceValidation: z.object({
-    body: z.object({
-      content: z.string().trim().min(10).max(5000),
-    }),
-  }),
-
-  engagementMetricsValidation: z.object({
-    query: z.object({
-      from: z.string().optional(),
-      to: z.string().optional(),
-    }),
-  }),
 };
+
