@@ -86,6 +86,12 @@ router.patch(
   CommunityController.resolveModerationAppeal,
 );
 
+router.get(
+  '/moderation/threads',
+  auth('lawyer', 'admin', 'superAdmin'),
+  CommunityController.getModerationThreads,
+);
+
 // Thread routes
 router.post(
   '/threads',

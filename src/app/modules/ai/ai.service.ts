@@ -130,7 +130,12 @@ const analyzeLegalDocument = async (
 /**
  * Chat with AI (Uses Groq - fast text chat)
  */
-const chatWithAI = async (message: string, context: string, history: any[] = []): Promise<string> => {
+const chatWithAI = async (
+  message: string,
+  context: string,
+  history: any[] = [],
+  options?: { throwOnFailure?: boolean },
+): Promise<string> => {
   try {
     const systemPrompt = `You are an expert legal assistant named Advyon AI.
     ${context ? `CONTEXT:\n${context}` : ''}
@@ -145,9 +150,21 @@ const chatWithAI = async (message: string, context: string, history: any[] = [])
       model: GROQ_MODEL,
     });
 
-    return completion.choices[0]?.message?.content || "I couldn't generate a response.";
+    const content = completion.choices[0]?.message?.content;
+    if (!content) {
+      if (options?.throwOnFailure) {
+        throw new Error('AI provider returned an empty response.');
+      }
+      return "I couldn't generate a response.";
+    }
+
+    return content;
   } catch (error) {
     console.error('Groq chat error:', error);
+    if (options?.throwOnFailure) {
+      const message = (error as Error)?.message || 'AI provider request failed.';
+      throw new Error(message);
+    }
     return "I'm having trouble. Please try again.";
   }
 };

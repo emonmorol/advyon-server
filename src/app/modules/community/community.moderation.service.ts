@@ -458,6 +458,13 @@ const createAppeal = async (params: {
     throw new AppError(httpStatus.NOT_FOUND, 'No moderation record found for this content.');
   }
 
+  if (review.authorId !== params.authorId) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You can only appeal moderation decisions for your own content.',
+    );
+  }
+
   if (!['review', 'rejected'].includes(review.status)) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
@@ -568,4 +575,3 @@ export const CommunityModerationService = {
   getAppeals,
   resolveAppeal,
 };
-
