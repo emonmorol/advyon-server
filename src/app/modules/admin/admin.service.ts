@@ -434,8 +434,8 @@ const getAnalyticsOverview = async () => {
     totalCases = await Case.countDocuments({ isDeleted: false });
   } catch { /* module may not be loaded */ }
   try {
-    const { Document } = await import('../document/document.model');
-    totalDocuments = await Document.countDocuments({});
+    const { DocumentModel } = await import('../document/document.model');
+    totalDocuments = await DocumentModel.countDocuments({});
   } catch { /* module may not be loaded */ }
 
   return {
