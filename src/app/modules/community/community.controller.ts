@@ -21,11 +21,26 @@ const createThread = catchAsync(async (req, res) => {
 });
 
 const getAllThreads = catchAsync(async (req, res) => {
-  const result = await CommunityService.getAllThreads(req.query);
+  const result = await CommunityService.getAllThreads(req.query, {
+    allowHidden: false,
+  });
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Threads retrieved successfully',
+    meta: result.meta,
+    data: result.result,
+  });
+});
+
+const getModerationThreads = catchAsync(async (req, res) => {
+  const result = await CommunityService.getAllThreads(req.query, {
+    allowHidden: true,
+  });
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Moderation threads retrieved successfully',
     meta: result.meta,
     data: result.result,
   });
@@ -283,6 +298,7 @@ const getEngagementMetrics = catchAsync(async (req, res) => {
 export const CommunityController = {
   createThread,
   getAllThreads,
+  getModerationThreads,
   getThreadById,
   addReply,
   voteThread,

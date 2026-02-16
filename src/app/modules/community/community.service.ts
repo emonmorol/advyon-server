@@ -73,9 +73,38 @@ const createThread = async (payload: TThread & { author: string }) => {
   return refreshedResult || result;
 };
 
-const getAllThreads = async (query: Record<string, unknown>) => {
+const buildRepliesLookupStage = (includeHidden: boolean) => ({
+  $lookup: {
+    from: 'replies',
+    let: { threadRef: '$_id' },
+    pipeline: [
+      {
+        $match: {
+          $expr: {
+            $and: [
+              { $eq: ['$threadId', '$$threadRef'] },
+              {
+                $cond: {
+                  if: includeHidden,
+                  then: true,
+                  else: { $ne: ['$isVisible', false] },
+                },
+              },
+            ],
+          },
+        },
+      },
+    ],
+    as: 'repliesArray',
+  },
+});
+
+const getAllThreads = async (
+  query: Record<string, unknown>,
+  options?: { allowHidden?: boolean },
+) => {
   const pipeline: any[] = [];
-  const includeHidden = query.includeHidden === 'true';
+  const includeHidden = options?.allowHidden === true && query.includeHidden === 'true';
 
   if (!includeHidden) {
     pipeline.push({ $match: { isVisible: { $ne: false } } });
@@ -111,31 +140,7 @@ const getAllThreads = async (query: Record<string, unknown>) => {
     pipeline.push({ $match: { category: query.category } });
   }
 
-  pipeline.push({
-    $lookup: {
-      from: 'replies',
-      let: { threadRef: '$_id' },
-      pipeline: [
-        {
-          $match: {
-            $expr: {
-              $and: [
-                { $eq: ['$threadId', '$$threadRef'] },
-                {
-                  $cond: {
-                    if: includeHidden,
-                    then: true,
-                    else: { $ne: ['$isVisible', false] },
-                  },
-                },
-              ],
-            },
-          },
-        },
-      ],
-      as: 'repliesArray',
-    },
-  });
+  pipeline.push(buildRepliesLookupStage(includeHidden));
 
   pipeline.push({
     $addFields: {
@@ -208,14 +213,7 @@ const getAllThreads = async (query: Record<string, unknown>) => {
     countPipeline.push({ $match: { category: query.category } });
   }
   if (query.repliesCount !== undefined) {
-    countPipeline.push({
-      $lookup: {
-        from: 'replies',
-        localField: '_id',
-        foreignField: 'threadId',
-        as: 'repliesArray',
-      },
-    });
+    countPipeline.push(buildRepliesLookupStage(includeHidden));
     countPipeline.push({
       $addFields: { repliesCount: { $size: '$repliesArray' } },
     });
