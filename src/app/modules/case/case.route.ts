@@ -6,6 +6,7 @@ import { CaseValidation } from './case.validation';
 import { DocumentControllers } from '../document/document.controller';
 import { DocumentValidation } from '../document/document.validation';
 import { uploadDocument } from '../../config/document-upload.config';
+import { fileUploadSecurity } from '../../middlewares/fileUploadSecurity';
 
 const router = express.Router();
 
@@ -62,6 +63,7 @@ router.post(
   '/:caseId/documents',
   auth(),
   uploadDocument.single('file'),
+  fileUploadSecurity,  // WBS-TD-SC-03
   validateRequest(DocumentValidation.uploadDocumentValidation),
   DocumentControllers.uploadDocument,
 );
@@ -109,8 +111,8 @@ router.get(
  *       404:
  *         description: Case not found
  */
-router.get('/:caseId', 
-  auth(), 
+router.get('/:caseId',
+  auth(),
   CaseControllers.getCaseById);
 
 /**
@@ -171,9 +173,9 @@ router.put(
  *       200:
  *         description: Case deleted successfully
  */
-router.delete('/:caseId', 
+router.delete('/:caseId',
   auth(),
-   CaseControllers.deleteCase);
+  CaseControllers.deleteCase);
 
 /**
  * @swagger
@@ -194,8 +196,8 @@ router.delete('/:caseId',
  *       200:
  *         description: Case archived successfully
  */
-router.patch('/:caseId/archive', 
-  auth(), 
+router.patch('/:caseId/archive',
+  auth(),
   CaseControllers.archiveCase);
 
 /**
@@ -217,8 +219,8 @@ router.patch('/:caseId/archive',
  *       200:
  *         description: Case restored successfully
  */
-router.patch('/:caseId/restore', 
-  auth(), 
+router.patch('/:caseId/restore',
+  auth(),
   CaseControllers.restoreCase);
 
 // =========================================================================
@@ -252,6 +254,7 @@ router.post(
   '/:caseId/documents',
   auth(),
   uploadDocument.single('file'),
+  fileUploadSecurity,  // WBS-TD-SC-03
   validateRequest(DocumentValidation.uploadDocumentValidation),
   DocumentControllers.uploadDocument,
 );
