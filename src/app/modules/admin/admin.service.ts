@@ -340,7 +340,9 @@ const getCaseOverview = async (): Promise<any> => {
     return {
       totalCases,
       activeCases: casesByStatus['active'] || 0,
-      archivedCases: casesByStatus['archived'] || 0,
+      pendingCases: casesByStatus['pending'] || 0,
+      reviewCases: casesByStatus['review'] || 0,
+      closedCases: casesByStatus['closed'] || 0,
       casesByStatus,
       recentCases,
     };
@@ -349,7 +351,9 @@ const getCaseOverview = async (): Promise<any> => {
     return {
       totalCases: 0,
       activeCases: 0,
-      archivedCases: 0,
+      pendingCases: 0,
+      reviewCases: 0,
+      closedCases: 0,
       casesByStatus: {},
       recentCases: [],
     };

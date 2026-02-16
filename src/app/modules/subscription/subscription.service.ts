@@ -10,6 +10,7 @@ import { PLAN_CONFIGS, SUBSCRIPTION_ERROR_MESSAGES } from './subscription.consta
 import { ICheckoutSessionRequest, TPlanTier, TBillingInterval } from './subscription.interface';
 import { stripe } from '../../config/stripe.config';
 import AppError from '../../errors/appError';
+import { Payment } from '../payment/payment.model';
 
 /**
  * Get all available subscription plans.
@@ -254,6 +255,20 @@ const verifyCheckoutSession = async (userId: string, sessionId: string) => {
     },
     { upsert: true, new: true },
   );
+
+  // Also create a payment record so payment history is visible
+  const paymentIntentId = session.payment_intent as string || session.id;
+  const existingPayment = await Payment.findOne({ stripePaymentIntentId: paymentIntentId });
+  if (!existingPayment) {
+    await Payment.create({
+      user: user._id,
+      amount: session.amount_total || 0,
+      currency: session.currency || 'usd',
+      status: 'succeeded',
+      stripePaymentIntentId: paymentIntentId,
+      description: `${plan.charAt(0).toUpperCase() + plan.slice(1)} Plan — ${billingInterval}ly subscription`,
+    });
+  }
 
   return subscription;
 };
