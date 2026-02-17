@@ -13,6 +13,7 @@ import { DocumentModel } from './document.model';
 import { Case } from '../case/case.model';
 import { User } from '../user/user.model';
 import AppError from '../../errors/appError';
+import { getSignedUrl } from '../../utils/file.upload.utils';
 
 /**
  * Upload a document with AI analysis
@@ -376,11 +377,21 @@ const getDocumentById = catchAsync(async (req, res) => {
     });
   }
 
+  // WBS-TD-Fix: Return signed URL
+  const docObj = document.toObject();
+  if (docObj.cloudinaryPublicId) {
+    try {
+      docObj.cloudinaryUrl = getSignedUrl(docObj.cloudinaryPublicId);
+    } catch (err) {
+      console.error(`Failed to sign URL for doc ${document.id}:`, err);
+    }
+  }
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Document retrieved successfully',
-    data: document,
+    data: docObj,
   });
 });
 
