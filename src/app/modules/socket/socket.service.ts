@@ -11,6 +11,8 @@ import { User } from '../user/user.model';
  * - New message alerts
  * - Case status updates
  * - Dashboard stat updates
+ * - Sidebar counters (WBS-5.2)
+ * - Online status (WBS-5.2)
  */
 
 // Event types for type safety
@@ -21,7 +23,10 @@ export const SOCKET_EVENTS = {
   ANALYSIS_COMPLETE: 'analysis:complete',
   STATS_UPDATED: 'stats:updated',
   NOTIFICATION: 'notification:new',
-  
+  SIDEBAR_UPDATE: 'sidebar:update', // WBS-5.2
+  USER_ONLINE: 'user:online',       // WBS-5.2
+  USER_OFFLINE: 'user:offline',     // WBS-5.2
+
   // Client -> Server events
   JOIN_CASE: 'case:join',
   LEAVE_CASE: 'case:leave',
@@ -53,7 +58,7 @@ class SocketService {
     this.io.use(async (socket: AuthenticatedSocket, next) => {
       try {
         const token = socket.handshake.auth?.token;
-        
+
         if (!token) {
           return next(new Error('Authentication required'));
         }
@@ -65,7 +70,7 @@ class SocketService {
         });
 
         const user = await User.findOne({ clerkUserId: decoded.sub });
-        
+
         if (!user) {
           return next(new Error('User not found'));
         }
@@ -80,16 +85,19 @@ class SocketService {
 
     this.io.on('connection', (socket: AuthenticatedSocket) => {
       console.log(`[Socket] User connected: ${socket.userId}`);
-      
+
       // Track user's socket connections
       if (socket.userId) {
         if (!this.userSockets.has(socket.userId)) {
           this.userSockets.set(socket.userId, new Set());
         }
         this.userSockets.get(socket.userId)!.add(socket.id);
-        
+
         // Join user's personal room for targeted notifications
         socket.join(`user:${socket.userId}`);
+
+        // Broadcast online status WBS-5.2
+        this.broadcast(SOCKET_EVENTS.USER_ONLINE, { userId: socket.userId });
       }
 
       // Handle joining case rooms for case-specific updates
@@ -106,9 +114,14 @@ class SocketService {
       socket.on('disconnect', () => {
         console.log(`[Socket] User disconnected: ${socket.userId}`);
         if (socket.userId) {
-          this.userSockets.get(socket.userId)?.delete(socket.id);
-          if (this.userSockets.get(socket.userId)?.size === 0) {
-            this.userSockets.delete(socket.userId);
+          const userSockectSet = this.userSockets.get(socket.userId);
+          if (userSockectSet) {
+            userSockectSet.delete(socket.id);
+            if (userSockectSet.size === 0) {
+              this.userSockets.delete(socket.userId);
+              // Broadcast offline status WBS-5.2
+              this.broadcast(SOCKET_EVENTS.USER_OFFLINE, { userId: socket.userId });
+            }
           }
         }
       });
@@ -150,6 +163,7 @@ class SocketService {
    */
   notifyNewMessage(userId: string, message: any): void {
     this.emitToUser(userId, SOCKET_EVENTS.MSG_RECEIVED, message);
+    this.notifySidebarUpdate(userId, { type: 'messages' });
   }
 
   /**
@@ -166,6 +180,7 @@ class SocketService {
       documentId,
       result,
     });
+    this.notifySidebarUpdate(userId, { type: 'alerts' });
   }
 
   /**
@@ -173,6 +188,13 @@ class SocketService {
    */
   notifyCaseUpdate(caseId: string, update: any): void {
     this.emitToCase(caseId, SOCKET_EVENTS.CASE_UPDATED, update);
+  }
+
+  /**
+   * WBS-5.2: Send sidebar update trigger (counters, badges)
+   */
+  notifySidebarUpdate(userId: string, data: { type: 'cases' | 'messages' | 'alerts' | 'all' }): void {
+    this.emitToUser(userId, SOCKET_EVENTS.SIDEBAR_UPDATE, data);
   }
 
   /**

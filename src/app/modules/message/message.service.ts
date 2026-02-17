@@ -1,13 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import httpStatus from 'http-status';
 import { Types } from 'mongoose';
+import { v4 as uuidv4 } from 'uuid';
 import AppError from '../../errors/appError';
 import { Message, IMessage } from './message.model';
 import { User } from '../user/user.model';
+import { socketService, SOCKET_EVENTS } from '../socket/socket.service';
 
 /**
- * Phase 1.2: Message Service
- * Handles message/client request operations
+ * WBS-7.2: Message Service
+ * Enhanced with threading, attachments, and search.
  */
 
 // Get messages for a user (receiver) with pagination
@@ -17,28 +19,40 @@ const getMessagesForUser = async (
     status?: string;
     page?: number;
     limit?: number;
+    search?: string;
+    threadId?: string;
   }
 ) => {
-  const { status, page = 1, limit = 10 } = query;
-  
-  // Find the user by custom id to get ObjectId
+  const { status, page = 1, limit = 10, search, threadId } = query;
+
   const user = await User.findOne({ id: userId });
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
 
-  const filter: any = { receiverId: user._id };
+  const filter: any = {
+    $or: [{ receiverId: user._id }, { senderId: user._id }] // Get both sent/received
+  };
+
   if (status) {
     filter.status = status;
   }
 
-  const skip = (page - 1) * limit;
-  
+  if (threadId) {
+    filter.threadId = threadId;
+  }
+
+  if (search) {
+    filter.$text = { $search: search };
+  }
+
+  const skip = (Number(page) - 1) * Number(limit);
+
   const [messages, total] = await Promise.all([
     Message.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit)
+      .limit(Number(limit))
       .populate('senderId', 'fullName displayName email avatarUrl')
       .populate('caseId', 'title caseNumber')
       .lean(),
@@ -48,10 +62,10 @@ const getMessagesForUser = async (
   return {
     messages,
     meta: {
-      page,
-      limit,
+      page: Number(page),
+      limit: Number(limit),
       total,
-      totalPage: Math.ceil(total / limit),
+      totalPage: Math.ceil(total / Number(limit)),
     },
   };
 };
@@ -102,6 +116,9 @@ const createMessage = async (
     subject: string;
     content: string;
     priority?: 'low' | 'medium' | 'high';
+    threadId?: string;
+    parentMessageId?: string;
+    attachments?: { name: string; url: string; type: string; size?: number }[];
   }
 ) => {
   const sender = await User.findOne({ id: senderId });
@@ -109,7 +126,14 @@ const createMessage = async (
     throw new AppError(httpStatus.NOT_FOUND, 'Sender not found');
   }
 
-  const receiver = await User.findOne({ id: payload.receiverId });
+  // Receiver can be user Id string or ObjectId
+  let receiver: any;
+  if (Types.ObjectId.isValid(payload.receiverId)) {
+    receiver = await User.findById(payload.receiverId);
+  } else {
+    receiver = await User.findOne({ id: payload.receiverId });
+  }
+
   if (!receiver) {
     throw new AppError(httpStatus.NOT_FOUND, 'Receiver not found');
   }
@@ -121,13 +145,35 @@ const createMessage = async (
     content: payload.content,
     priority: payload.priority || 'medium',
     status: 'unread',
+    attachments: payload.attachments || [],
+    threadId: payload.threadId || (payload.caseId ? undefined : uuidv4()), // If caseId provided, maybe use caseId as thread grouping key, or generate one
   };
 
   if (payload.caseId) {
     messageData.caseId = new Types.ObjectId(payload.caseId);
+    if (!messageData.threadId) messageData.threadId = payload.caseId; // Default threadId to caseId if not explicit
+  }
+
+  if (payload.parentMessageId) {
+    messageData.parentMessageId = new Types.ObjectId(payload.parentMessageId);
+    // Inherit threadId if replying
+    const parent = await Message.findById(payload.parentMessageId);
+    if (parent) messageData.threadId = parent.threadId;
   }
 
   const message = await Message.create(messageData);
+
+  // Notify receiver via Socket
+  socketService.notifyNewMessage(receiver.id, {
+    id: message._id,
+    subject: message.subject,
+    sender: {
+      id: sender.id,
+      name: sender.fullName
+    },
+    createdAt: message.createdAt
+  });
+
   return message;
 };
 
@@ -168,7 +214,7 @@ const archiveMessage = async (messageId: string, userId: string) => {
   const message = await Message.findOneAndUpdate(
     {
       _id: new Types.ObjectId(messageId),
-      receiverId: user._id,
+      receiverId: user._id, // Only receiver can archive? Or sender too?
     },
     { status: 'archived' },
     { new: true }
@@ -181,6 +227,37 @@ const archiveMessage = async (messageId: string, userId: string) => {
   return message;
 };
 
+// Toggle Star
+const toggleStar = async (messageId: string, userId: string) => {
+  const user = await User.findOne({ id: userId });
+  if (!user) throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+
+  const message = await Message.findOne({ _id: messageId, $or: [{ receiverId: user._id }, { senderId: user._id }] });
+  if (!message) throw new AppError(httpStatus.NOT_FOUND, 'Message not found');
+
+  message.isStarred = !message.isStarred;
+  await message.save();
+  return message;
+};
+
+// Get threads for a case
+const getCaseThreads = async (caseId: string) => {
+  const messages = await Message.aggregate([
+    { $match: { caseId: new Types.ObjectId(caseId) } },
+    { $sort: { createdAt: 1 } },
+    {
+      $group: {
+        _id: "$threadId",
+        lastMessage: { $last: "$$ROOT" },
+        messageCount: { $sum: 1 },
+        messages: { $push: "$$ROOT" } // Might be too heavy if many messages
+      }
+    },
+    { $sort: { "lastMessage.createdAt": -1 } }
+  ]);
+  return messages;
+};
+
 export const MessageServices = {
   getMessagesForUser,
   getPendingCount,
@@ -188,4 +265,6 @@ export const MessageServices = {
   createMessage,
   markAsRead,
   archiveMessage,
+  toggleStar,
+  getCaseThreads
 };
