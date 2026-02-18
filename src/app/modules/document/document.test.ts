@@ -2,6 +2,7 @@ import { DocumentServices } from './document.service';
 import { DocumentModel } from './document.model';
 import { User } from '../user/user.model';
 import { Case } from '../case/case.model';
+import { CaseAccessModel } from '../caseAccess/caseAccess.model';
 import { cloudinaryUpload } from '../../config/cloudinary.config';
 import { ActivityService } from '../activity/activity.service';
 import AppError from '../../errors/appError';
@@ -10,6 +11,7 @@ import AppError from '../../errors/appError';
 jest.mock('./document.model');
 jest.mock('../user/user.model');
 jest.mock('../case/case.model');
+jest.mock('../caseAccess/caseAccess.model');
 jest.mock('../../config/cloudinary.config');
 jest.mock('../activity/activity.service', () => ({
   ActivityService: {
@@ -48,6 +50,7 @@ describe('Document Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (ActivityService.logActivity as jest.Mock).mockResolvedValue(undefined);
+    (CaseAccessModel.exists as jest.Mock).mockResolvedValue(false);
   });
 
   describe('uploadDocument', () => {

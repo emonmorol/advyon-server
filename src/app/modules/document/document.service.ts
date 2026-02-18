@@ -3,6 +3,7 @@ import httpStatus from 'http-status';
 import AppError from '../../errors/appError';
 import { User } from '../user/user.model';
 import { Case } from '../case/case.model';
+import { CaseAccessModel } from '../caseAccess/caseAccess.model';
 import mongoose from 'mongoose';
 import { DocumentModel } from './document.model';
 import {
@@ -100,13 +101,30 @@ const getDocumentsByCase = async (
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
 
-  // Verify case exists and user owns it
-  const caseData = await Case.findOne({ id: caseId });
+  // Verify case exists
+  let caseData = null;
+  if (mongoose.Types.ObjectId.isValid(caseId)) {
+    caseData = await Case.findById(caseId);
+  }
+
+  if (!caseData) {
+    caseData = await Case.findOne({ id: caseId });
+  }
+
   if (!caseData) {
     throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
   }
 
-  if (caseData.createdBy.toString() !== user._id.toString()) {
+  const isOwner = caseData.createdBy.toString() === user._id.toString();
+  const isPrimaryClient = caseData.clientId?.toString() === user._id.toString();
+  const hasSharedAccess = await CaseAccessModel.exists({
+    caseId: caseData._id,
+    userId: user._id,
+    status: 'active',
+  });
+  const isPrivileged = user.role === 'admin' || user.role === 'superAdmin';
+
+  if (!isOwner && !isPrimaryClient && !hasSharedAccess && !isPrivileged) {
     throw new AppError(
       httpStatus.FORBIDDEN,
       'You are not authorized to access documents for this case',

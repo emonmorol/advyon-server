@@ -11,9 +11,93 @@ import {
 } from '../../utils/file.upload.utils';
 import { DocumentModel } from './document.model';
 import { Case } from '../case/case.model';
+import { CaseAccessModel } from '../caseAccess/caseAccess.model';
 import { User } from '../user/user.model';
 import AppError from '../../errors/appError';
 import { getSignedUrl } from '../../utils/file.upload.utils';
+
+const resolveUserByRequestId = async (requestUserId: string) => {
+  let user = await User.findOne({ id: requestUserId });
+
+  if (!user && mongoose.Types.ObjectId.isValid(requestUserId)) {
+    user = await User.findById(requestUserId);
+  }
+
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  return user;
+};
+
+const resolveCaseByIdentifier = async (caseId: string) => {
+  let caseData = null;
+
+  if (mongoose.Types.ObjectId.isValid(caseId)) {
+    caseData = await Case.findById(caseId);
+  }
+
+  if (!caseData) {
+    caseData = await Case.findOne({ id: caseId });
+  }
+
+  if (!caseData) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
+  }
+
+  return caseData;
+};
+
+const canAccessCase = async (user: any, caseData: any) => {
+  const isOwner = caseData.createdBy?.toString() === user._id.toString();
+  const isPrimaryClient = caseData.clientId?.toString() === user._id.toString();
+  const isPrivileged = user.role === 'admin' || user.role === 'superAdmin';
+
+  if (isOwner || isPrimaryClient || isPrivileged) {
+    return true;
+  }
+
+  const hasSharedAccess = await CaseAccessModel.exists({
+    caseId: caseData._id,
+    userId: user._id,
+    status: 'active',
+  });
+
+  return Boolean(hasSharedAccess);
+};
+
+const assertCaseAccess = async (requestUserId: string, caseId: string) => {
+  const user = await resolveUserByRequestId(requestUserId);
+  const caseData = await resolveCaseByIdentifier(caseId);
+
+  const hasAccess = await canAccessCase(user, caseData);
+  if (!hasAccess) {
+    throw new AppError(httpStatus.FORBIDDEN, 'You do not have access to this case');
+  }
+
+  return { user, caseData };
+};
+
+const assertDocumentAccess = async (requestUserId: string, documentId: string) => {
+  const user = await resolveUserByRequestId(requestUserId);
+  const document = await DocumentModel.findOne({ id: documentId });
+
+  if (!document) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+  }
+
+  const caseData = await Case.findById(document.caseId);
+  if (!caseData) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Associated case not found');
+  }
+
+  const hasAccess = await canAccessCase(user, caseData);
+  if (!hasAccess) {
+    throw new AppError(httpStatus.FORBIDDEN, 'You do not have access to this document');
+  }
+
+  return { user, document, caseData };
+};
 
 /**
  * Upload a document with AI analysis
@@ -334,19 +418,24 @@ const getDocuments = catchAsync(async (req, res) => {
  * GET /cases/:caseId/documents/:documentId
  */
 const getDocument = catchAsync(async (req, res) => {
-  const { documentId } = req.params;
+  const { userId } = req.user;
+  const { caseId, documentId } = req.params;
+
+  const { caseData } = await assertDocumentAccess(userId, documentId);
+
+  const belongsToRequestedCase =
+    caseData.id === caseId || caseData._id.toString() === caseId;
+
+  if (!belongsToRequestedCase) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Document does not belong to this case');
+  }
 
   const document = await DocumentModel.findOne({ id: documentId })
     .populate('uploadedBy', 'id fullName email')
     .populate('caseId', 'id caseNumber title');
 
   if (!document) {
-    return sendResponse(res, {
-      statusCode: httpStatus.NOT_FOUND,
-      success: false,
-      message: 'Document not found',
-      data: null,
-    });
+    throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
   }
 
   sendResponse(res, {
@@ -362,22 +451,19 @@ const getDocument = catchAsync(async (req, res) => {
  * GET /documents/id/:documentId
  */
 const getDocumentById = catchAsync(async (req, res) => {
+  const { userId } = req.user;
   const { documentId } = req.params;
+
+  await assertDocumentAccess(userId, documentId);
 
   const document = await DocumentModel.findOne({ id: documentId })
     .populate('uploadedBy', 'id fullName email')
     .populate('caseId', 'id caseNumber title');
 
   if (!document) {
-    return sendResponse(res, {
-      statusCode: httpStatus.NOT_FOUND,
-      success: false,
-      message: 'Document not found',
-      data: null,
-    });
+    throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
   }
 
-  // WBS-TD-Fix: Return signed URL
   const docObj = document.toObject();
   if (docObj.cloudinaryPublicId) {
     try {
@@ -400,7 +486,17 @@ const getDocumentById = catchAsync(async (req, res) => {
  * GET /cases/:caseId/documents/:documentId/status
  */
 const getDocumentStatus = catchAsync(async (req, res) => {
-  const { documentId } = req.params;
+  const { userId } = req.user;
+  const { caseId, documentId } = req.params;
+
+  const { caseData } = await assertDocumentAccess(userId, documentId);
+
+  const belongsToRequestedCase =
+    caseData.id === caseId || caseData._id.toString() === caseId;
+
+  if (!belongsToRequestedCase) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Document does not belong to this case');
+  }
 
   const document = await DocumentModel.findOne(
     { id: documentId },
@@ -456,7 +552,17 @@ const deleteDocument = catchAsync(async (req, res) => {
  * POST /cases/:caseId/documents/:documentId/reanalyze
  */
 const reanalyzeDocument = catchAsync(async (req, res) => {
-  const { documentId } = req.params;
+  const { userId } = req.user;
+  const { caseId, documentId } = req.params;
+
+  const { caseData } = await assertDocumentAccess(userId, documentId);
+
+  const belongsToRequestedCase =
+    caseData.id === caseId || caseData._id.toString() === caseId;
+
+  if (!belongsToRequestedCase) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Document does not belong to this case');
+  }
 
   const document = await DocumentModel.findOne({ id: documentId });
 
@@ -493,26 +599,13 @@ const downloadDocument = catchAsync(async (req, res) => {
   const { caseId, documentId } = req.params;
   const { userId } = req.user;
 
-  const document = await DocumentModel.findOne({ id: documentId });
+  const { document, caseData } = await assertDocumentAccess(userId, documentId);
 
-  if (!document) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
-  }
+  const belongsToRequestedCase =
+    caseData.id === caseId || caseData._id.toString() === caseId;
 
-  // WBS-5.5: Ownership check — user must belong to the case or be admin/superAdmin
-  const userRole = req.user.role;
-  if (!['admin', 'superAdmin'].includes(userRole)) {
-    const caseDoc = await Case.findById(document.caseId);
-    if (!caseDoc) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Associated case not found');
-    }
-    const isMember =
-      (caseDoc as any).clientId?.toString() === userId ||
-      (caseDoc as any).lawyerId?.toString() === userId ||
-      (caseDoc as any).members?.some((m: any) => m.toString() === userId);
-    if (!isMember) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You do not have access to this document');
-    }
+  if (!belongsToRequestedCase) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Document does not belong to this case');
   }
 
   // Return Cloudinary URL with proper Content-Disposition guidance
@@ -547,23 +640,12 @@ const batchDownload = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Maximum 20 documents per batch download');
   }
 
-  // Ownership check for the case
-  const userRole = req.user.role;
-  if (!['admin', 'superAdmin'].includes(userRole)) {
-    const caseDoc = await Case.findById(caseId).catch(() => Case.findOne({ id: caseId }));
-    if (!caseDoc) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
-    }
-    const isMember =
-      (caseDoc as any).clientId?.toString() === userId ||
-      (caseDoc as any).lawyerId?.toString() === userId ||
-      (caseDoc as any).members?.some((m: any) => m.toString() === userId);
-    if (!isMember) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You do not have access to this case');
-    }
-  }
+  const { caseData } = await assertCaseAccess(userId, caseId);
 
-  const documents = await DocumentModel.find({ id: { $in: documentIds } });
+  const documents = await DocumentModel.find({
+    id: { $in: documentIds },
+    caseId: caseData._id,
+  });
 
   const results = documentIds.map((docId) => {
     const doc = documents.find((d) => d.id === docId);
@@ -590,7 +672,11 @@ const batchDownload = catchAsync(async (req, res) => {
  * GET /documents/:documentId/content
  */
 const getDocumentContent = catchAsync(async (req, res) => {
+  const { userId } = req.user;
   const { documentId } = req.params;
+
+  await assertDocumentAccess(userId, documentId);
+
   const document = await DocumentServices.getDocumentContent(documentId);
 
   if (!document.cloudinaryUrl) {
@@ -613,8 +699,11 @@ const getDocumentContent = catchAsync(async (req, res) => {
  * PUT /documents/:documentId/summary
  */
 const updateDocumentSummary = catchAsync(async (req, res) => {
+  const { userId } = req.user;
   const { documentId } = req.params;
   const { summary } = req.body;
+
+  await assertDocumentAccess(userId, documentId);
 
   if (!summary) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Summary is required');
