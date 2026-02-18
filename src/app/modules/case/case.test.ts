@@ -1,11 +1,21 @@
 import { CaseServices } from './case.service';
 import { Case } from './case.model';
 import { User } from '../user/user.model';
+import { CaseAccessModel } from '../caseAccess/caseAccess.model';
+import { DocumentModel } from '../document/document.model';
+import { ActivityService } from '../activity/activity.service';
 import AppError from '../../errors/appError';
 
 // Mock dependencies
 jest.mock('./case.model');
 jest.mock('../user/user.model');
+jest.mock('../caseAccess/caseAccess.model');
+jest.mock('../document/document.model');
+jest.mock('../activity/activity.service', () => ({
+  ActivityService: {
+    logActivity: jest.fn().mockResolvedValue(undefined),
+  },
+}));
 jest.mock('./case.utils', () => ({
   generateCaseId: jest.fn().mockResolvedValue('CS-2024-0001'),
 }));
@@ -28,6 +38,10 @@ describe('Case Service', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (CaseAccessModel.find as jest.Mock).mockReturnValue({
+      select: jest.fn().mockResolvedValue([]),
+    });
+    (ActivityService.logActivity as jest.Mock).mockResolvedValue(undefined);
   });
 
   describe('createCase', () => {
@@ -92,11 +106,20 @@ describe('Case Service', () => {
         id: 'CS-2024-0001',
         title: 'Test Case',
         createdBy: mockUser,
+        toObject: jest.fn().mockReturnValue({
+          id: 'CS-2024-0001',
+          title: 'Test Case',
+          createdBy: mockUser,
+        }),
       };
 
       (User.findOne as jest.Mock).mockResolvedValue(mockUser);
       (Case.findOne as jest.Mock).mockReturnValue({
         populate: jest.fn().mockResolvedValue(mockCase),
+      });
+      (DocumentModel.find as jest.Mock).mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockResolvedValue([]),
       });
 
       const result = await CaseServices.getCaseById('CS-2024-0001', mockUserId);
@@ -108,6 +131,10 @@ describe('Case Service', () => {
       (User.findOne as jest.Mock).mockResolvedValue(mockUser);
       (Case.findOne as jest.Mock).mockReturnValue({
         populate: jest.fn().mockResolvedValue(null),
+      });
+      (DocumentModel.find as jest.Mock).mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockResolvedValue([]),
       });
 
       await expect(
