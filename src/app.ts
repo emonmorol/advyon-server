@@ -12,6 +12,7 @@ import swaggerSpec from './app/config/swagger.config';
 import globalErrorHandler from './app/middlewares/globalErrorhandler';
 import notFound from './app/middlewares/notFound';
 import router from './app/routes';
+import { HealthRoutes } from './app/modules/health/health.route';
 
 const app: Application = express();
 
@@ -77,6 +78,9 @@ app.use(
 
 // Log CORS configuration on startup (for debugging)
 console.log('CORS enabled for origins:', ALLOWED_ORIGINS);
+
+// Health check (no auth, no body parsing)
+app.use('/api/v1/health', HealthRoutes);
 
 // application routes
 app.use('/api/v1', router);

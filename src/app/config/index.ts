@@ -25,4 +25,7 @@ export default {
   openrouter_api_key: process.env.OPENROUTER_API_KEY,
   groq_api_key: process.env.GROQ_API_KEY,
   gemini_api_key: process.env.GEMINI_API_KEY,
+  stripe_secret_key: process.env.STRIPE_SECRET_KEY,
+  stripe_publishable_key: process.env.STRIPE_PUBLISHABLE_KEY,
+  stripe_webhook_secret: process.env.STRIPE_WEBHOOK_SECRET,
 };
