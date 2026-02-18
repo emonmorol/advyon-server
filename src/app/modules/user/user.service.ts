@@ -290,7 +290,10 @@ const getLawyerClients = async (lawyerId: string) => {
   // Find users with access to these cases
   const accesses = await CaseAccessModel.find({
     caseId: { $in: caseIds },
-  }).populate('userId');
+    status: 'active',
+  })
+    .populate('userId')
+    .populate('caseId', 'id caseNumber title');
 
   // Extract unique clients
   const uniqueClients = new Map<string, any>();
@@ -311,7 +314,7 @@ const getLawyerClients = async (lawyerId: string) => {
           phone: clientProfile?.phoneNumber || '',
           address: clientProfile?.address || '',
           accessStatus: access.status, // Status in the case
-          caseId: access.caseId, // Just one case reference for now
+          caseId: (access.caseId as any)?.id || String(access.caseId),
         });
       }
     }

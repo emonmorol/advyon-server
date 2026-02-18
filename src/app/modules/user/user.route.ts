@@ -138,7 +138,7 @@ router.get(
  */
 router.get(
   '/my-clients',
-  auth('lawyer'),
+  auth('lawyer', 'admin', 'superAdmin'),
   UserControllers.getLawyerClients,
 );
 
@@ -160,7 +160,7 @@ router.get(
  */
 router.get(
   '/clients/:id',
-  auth('lawyer'),
+  auth('lawyer', 'admin', 'superAdmin'),
   UserControllers.getClientDetail
 );
 
@@ -181,7 +181,7 @@ router.get(
  */
 router.delete(
   '/clients/:id',
-  auth('lawyer'),
+  auth('lawyer', 'admin', 'superAdmin'),
   UserControllers.archiveClient
 );
 

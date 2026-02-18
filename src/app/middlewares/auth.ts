@@ -116,6 +116,10 @@ const auth = (...requiredRoles: TUserRole[]) => {
 
       next();
     } catch (error: any) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+
       // Handle Clerk verification errors
       if (error.message?.includes('expired')) {
         throw new AppError(httpStatus.UNAUTHORIZED, 'Token has expired!');
