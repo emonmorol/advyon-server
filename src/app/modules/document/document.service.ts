@@ -13,6 +13,7 @@ import {
 import { generateDocumentId } from './document.utils';
 import { cloudinaryUpload } from '../../config/cloudinary.config';
 import { ActivityService } from '../activity/activity.service';
+import { getSignedUrl } from '../../utils/file.upload.utils';
 
 /**
  * Upload a document to a case
@@ -28,13 +29,13 @@ const uploadDocument = async (
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
-  
+
   // Verify case exists and user owns it
   let caseData;
   if (mongoose.Types.ObjectId.isValid(caseId)) {
     caseData = await Case.findById(caseId);
   }
-  
+
   if (!caseData) {
     caseData = await Case.findOne({ id: caseId });
   }
@@ -124,10 +125,24 @@ const getDocumentsByCase = async (
     .populate('uploadedBy', 'id fullName email')
     .sort({ uploadedAt: -1 });
 
-  // Group documents by folder
+  // WBS-TD-Fix: Map documents to include signed URLs if authenticated
+  const documentsWithSignedUrls = documents.map((doc) => {
+    const docObj = doc.toObject();
+    if (docObj.cloudinaryPublicId) {
+      try {
+        // Generate a fresh signed URL (valid for 1 hour)
+        docObj.cloudinaryUrl = getSignedUrl(docObj.cloudinaryPublicId);
+      } catch (err) {
+        console.error(`Failed to sign URL for doc ${docObj.id}:`, err);
+      }
+    }
+    return docObj;
+  });
+
+  // Group documents by folder using the signed URL version
   const groupedDocuments: TGroupedDocuments = {};
 
-  documents.forEach((doc) => {
+  documentsWithSignedUrls.forEach((doc) => {
     if (!groupedDocuments[doc.folderName]) {
       groupedDocuments[doc.folderName] = [];
     }
@@ -135,7 +150,7 @@ const getDocumentsByCase = async (
   });
 
   return {
-    documents,
+    documents: documentsWithSignedUrls,
     groupedByFolder: groupedDocuments,
     total: documents.length,
   };
@@ -209,11 +224,11 @@ const initiateDocumentUpload = async (payload: TInitiateDocumentPayload) => {
   // Verify user exists
   let user;
   if (mongoose.Types.ObjectId.isValid(uploaderId)) {
-      user = await User.findById(uploaderId);
+    user = await User.findById(uploaderId);
   }
-  
+
   if (!user) {
-      user = await User.findOne({ id: uploaderId });
+    user = await User.findOne({ id: uploaderId });
   }
 
   if (!user) {
@@ -225,7 +240,7 @@ const initiateDocumentUpload = async (payload: TInitiateDocumentPayload) => {
   if (mongoose.Types.ObjectId.isValid(caseId)) {
     caseData = await Case.findById(caseId);
   }
-  
+
   if (!caseData) {
     caseData = await Case.findOne({ id: caseId });
   }
@@ -349,15 +364,15 @@ const updateDocumentSummary = async (documentId: string, summary: string) => {
   // Ensure aiAnalysis object exists
   if (!document.aiAnalysis) {
     document.aiAnalysis = {
-        summary: '',
-        rawSummary: '',
-        keyPoints: [],
-        extractedEntities: [],
-        legalRefs: [],
-        documentCategory: null,
-        confidenceScore: 0,
-        analyzedAt: new Date(),
-        modelVersion: 'manual-update'
+      summary: '',
+      rawSummary: '',
+      keyPoints: [],
+      extractedEntities: [],
+      legalRefs: [],
+      documentCategory: null,
+      confidenceScore: 0,
+      analyzedAt: new Date(),
+      modelVersion: 'manual-update'
     };
   }
 
@@ -375,11 +390,11 @@ const autoFileDocument = async (documentId: string): Promise<void> => {
   if (!doc) throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
 
   const analysis = doc.aiAnalysis;
-  
+
   if (analysis?.documentCategory && analysis?.confidenceScore > 0.85) {
     const originalFolder = doc.folderName;
     const targetFolder = analysis.documentCategory; // e.g., "Evidence", "Pleadings"
-    
+
     // Update folder and auto-filing status
     doc.folderName = targetFolder;
     doc.autoFiling = {
@@ -390,7 +405,7 @@ const autoFileDocument = async (documentId: string): Promise<void> => {
       movedAt: new Date()
     };
     await doc.save();
-    
+
     // Log activity
     await ActivityService.logActivity({
       type: 'document_moved',

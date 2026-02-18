@@ -26,9 +26,9 @@ router.get('/my-documents', auth(), DocumentControllers.getAllDocuments);
  * Get document content (viewer)
  */
 router.get(
-    '/:documentId/content',
-    auth(),
-    DocumentControllers.getDocumentContent
+  '/:documentId/content',
+  auth(),
+  DocumentControllers.getDocumentContent
 );
 
 /**
@@ -36,9 +36,9 @@ router.get(
  * Update document summary
  */
 router.put(
-    '/:documentId/summary',
-    auth(),
-    DocumentControllers.updateDocumentSummary
+  '/:documentId/summary',
+  auth(),
+  DocumentControllers.updateDocumentSummary
 );
 
 /**
@@ -84,5 +84,11 @@ router.post(
  */
 router.delete('/:caseId/:documentId', auth(), DocumentControllers.deleteDocument);
 router.get('/:caseId/:documentId/download', auth('admin', 'superAdmin', 'lawyer', 'client'), DocumentControllers.downloadDocument);
+
+/**
+ * POST /documents/batch-download
+ * WBS-5.5: Batch download — returns download URLs for multiple documents
+ */
+router.post('/batch-download', auth('admin', 'superAdmin', 'lawyer', 'client'), DocumentControllers.batchDownload);
 
 export const DocumentRoutes = router;

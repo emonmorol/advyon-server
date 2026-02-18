@@ -13,6 +13,7 @@ import { DocumentModel } from './document.model';
 import { Case } from '../case/case.model';
 import { User } from '../user/user.model';
 import AppError from '../../errors/appError';
+import { getSignedUrl } from '../../utils/file.upload.utils';
 
 /**
  * Upload a document with AI analysis
@@ -74,14 +75,14 @@ const uploadDocument = catchAsync(async (req, res) => {
   if (isUserValidObjectId) {
     const uploaderUser = await User.findById(userId);
     if (!uploaderUser) {
-        // Fallback: It might be a valid ObjectID string but stored in 'id' field (unlikely but possible)
-        const userByCustomId = await User.findOne({ id: userId });
-        if (!userByCustomId) {
-             throw new AppError(httpStatus.NOT_FOUND, `Uploader user not found: ${userId}`);
-        }
-        resolvedUploaderId = userByCustomId._id.toString();
+      // Fallback: It might be a valid ObjectID string but stored in 'id' field (unlikely but possible)
+      const userByCustomId = await User.findOne({ id: userId });
+      if (!userByCustomId) {
+        throw new AppError(httpStatus.NOT_FOUND, `Uploader user not found: ${userId}`);
+      }
+      resolvedUploaderId = userByCustomId._id.toString();
     } else {
-        resolvedUploaderId = uploaderUser._id.toString();
+      resolvedUploaderId = uploaderUser._id.toString();
     }
   } else {
     // It's a custom ID (e.g., CLI-0002).
@@ -130,69 +131,69 @@ const uploadDocument = catchAsync(async (req, res) => {
  * Background process for Cloudinary Upload followed by AI analysis
  */
 async function processDocumentUploadAndAI(
-    documentId: string,
-    file: Express.Multer.File,
-    caseIdParam: string
+  documentId: string,
+  file: Express.Multer.File,
+  caseIdParam: string
 ): Promise<void> {
-    try {
-        // Step 1: Upload to Cloudinary
-        let cloudinaryResult;
+  try {
+    // Step 1: Upload to Cloudinary
+    let cloudinaryResult;
 
-        // Check if file is stored on disk (multer diskStorage) or in memory
-        if (file.path) {
-            // File is on disk
-            try {
-                cloudinaryResult = await uploadFileToCloudinary(file.path, {
-                    folder: `advyon/cases/${caseIdParam}/documents`,
-                    publicIdPrefix: `doc_${documentId}`,
-                    resourceType: 'auto',
-                });
-            } finally {
-                 // Clean up temp file only if it's a local file, regardless of upload success/failure
-                if (!file.path.startsWith('http')) {
-                    fs.unlink(file.path, (err) => {
-                        if (err) console.error('Error deleting temp file:', err);
-                    });
-                }
-            }
-        } else if (file.buffer) {
-            // File is in memory
-            cloudinaryResult = await uploadBufferToCloudinary(file.buffer, {
-                folder: `advyon/cases/${caseIdParam}/documents`,
-                publicIdPrefix: `doc_${documentId}`,
-                resourceType: 'auto',
-            });
-        } else {
-            throw new Error('File data not available');
+    // Check if file is stored on disk (multer diskStorage) or in memory
+    if (file.path) {
+      // File is on disk
+      try {
+        cloudinaryResult = await uploadFileToCloudinary(file.path, {
+          folder: `advyon/cases/${caseIdParam}/documents`,
+          publicIdPrefix: `doc_${documentId}`,
+          resourceType: 'auto',
+        });
+      } finally {
+        // Clean up temp file only if it's a local file, regardless of upload success/failure
+        if (!file.path.startsWith('http')) {
+          fs.unlink(file.path, (err) => {
+            if (err) console.error('Error deleting temp file:', err);
+          });
         }
-
-        // Step 2: Update DB with Cloudinary details (status: 'processing')
-        await DocumentServices.updateCloudinaryDetails(
-            documentId,
-            cloudinaryResult.secure_url,
-            cloudinaryResult.public_id,
-            cloudinaryResult.asset_id,
-        );
-
-        // Step 3: Trigger AI analysis
-        // We need to pass the file content to the AI. 
-        // If it was a buffer, we still have it. If it was a path, we might have deleted it, 
-        // so we should rely on the buffer or download it if needed (though we just uploaded it).
-        // Optimization: logic in processDocumentWithAI handles fetching if buffer missing.
-        // However, since we have the buffer or file path logic here, let's just proceed.
-        
-        await processDocumentWithAI(documentId, file, cloudinaryResult.secure_url);
-
-    } catch (error) {
-        console.error(`Upload processing failed for document ${documentId}:`, error);
-
-        // Update status to failed if upload fails
-        await DocumentServices.updateProcessingStatus(
-            documentId,
-            'failed',
-            error instanceof Error ? error.message : 'Upload failed',
-        );
+      }
+    } else if (file.buffer) {
+      // File is in memory
+      cloudinaryResult = await uploadBufferToCloudinary(file.buffer, {
+        folder: `advyon/cases/${caseIdParam}/documents`,
+        publicIdPrefix: `doc_${documentId}`,
+        resourceType: 'auto',
+      });
+    } else {
+      throw new Error('File data not available');
     }
+
+    // Step 2: Update DB with Cloudinary details (status: 'processing')
+    await DocumentServices.updateCloudinaryDetails(
+      documentId,
+      cloudinaryResult.secure_url,
+      cloudinaryResult.public_id,
+      cloudinaryResult.asset_id,
+    );
+
+    // Step 3: Trigger AI analysis
+    // We need to pass the file content to the AI. 
+    // If it was a buffer, we still have it. If it was a path, we might have deleted it, 
+    // so we should rely on the buffer or download it if needed (though we just uploaded it).
+    // Optimization: logic in processDocumentWithAI handles fetching if buffer missing.
+    // However, since we have the buffer or file path logic here, let's just proceed.
+
+    await processDocumentWithAI(documentId, file, cloudinaryResult.secure_url);
+
+  } catch (error) {
+    console.error(`Upload processing failed for document ${documentId}:`, error);
+
+    // Update status to failed if upload fails
+    await DocumentServices.updateProcessingStatus(
+      documentId,
+      'failed',
+      error instanceof Error ? error.message : 'Upload failed',
+    );
+  }
 }
 
 /**
@@ -206,11 +207,11 @@ async function processDocumentWithAI(
   fileUrl?: string
 ): Promise<void> {
   console.log(`[Document Controller] processDocumentWithAI started for Doc ID: ${documentId}`);
-  
+
   try {
     // Step 1: Get file buffer (from memory or fetch from URL)
     let fileBuffer = file.buffer;
-    
+
     if (!fileBuffer && fileUrl) {
       console.log(`[Document Controller] Fetching file from Cloudinary URL...`);
       const axios = await import('axios');
@@ -228,13 +229,13 @@ async function processDocumentWithAI(
     // No text extraction needed - Gemini reads the file directly
     console.log(`[Document Controller] Sending to Gemini Vision...`);
     const aiAnalysis = await AIService.analyzeLegalDocument('', fileBuffer, file.mimetype);
-    
+
     console.log(`[Document Controller] AI Analysis received. Confidence: ${aiAnalysis.confidenceScore}, Category: ${aiAnalysis.documentCategory}`);
 
     // Step 3: Update document in database
     // Update folderName if confidence is good (>0.6) - regardless of category
     const isAnalysisReliable = aiAnalysis.confidenceScore > 0.6 && aiAnalysis.documentCategory;
-    
+
     const updateData: any = {
       processingStatus: 'completed',
       aiAnalysis,
@@ -246,7 +247,7 @@ async function processDocumentWithAI(
       updateData.folderName = aiAnalysis.documentCategory;
       console.log(`[Document Controller] Auto-filing to folder: ${aiAnalysis.documentCategory}`);
     }
-    
+
     const updatedDoc = await DocumentModel.findOneAndUpdate(
       { id: documentId },
       updateData,
@@ -260,7 +261,7 @@ async function processDocumentWithAI(
     }
 
     console.log(`✅ AI analysis completed for document: ${documentId}`);
-    
+
   } catch (error) {
     console.error(`❌ AI processing failed for document ${documentId}:`, error);
 
@@ -376,11 +377,21 @@ const getDocumentById = catchAsync(async (req, res) => {
     });
   }
 
+  // WBS-TD-Fix: Return signed URL
+  const docObj = document.toObject();
+  if (docObj.cloudinaryPublicId) {
+    try {
+      docObj.cloudinaryUrl = getSignedUrl(docObj.cloudinaryPublicId);
+    } catch (err) {
+      console.error(`Failed to sign URL for doc ${document.id}:`, err);
+    }
+  }
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Document retrieved successfully',
-    data: document,
+    data: docObj,
   });
 });
 
@@ -476,9 +487,11 @@ const reanalyzeDocument = catchAsync(async (req, res) => {
 /**
  * Download a document
  * GET /documents/:caseId/:documentId/download
+ * WBS-5.5: Added ownership verification
  */
 const downloadDocument = catchAsync(async (req, res) => {
-  const { documentId } = req.params;
+  const { caseId, documentId } = req.params;
+  const { userId } = req.user;
 
   const document = await DocumentModel.findOne({ id: documentId });
 
@@ -486,8 +499,23 @@ const downloadDocument = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
   }
 
-  // In a real production app, we might proxy the file or use signed URLs
-  // For now, we'll return the Cloudinary URL for the client to download
+  // WBS-5.5: Ownership check — user must belong to the case or be admin/superAdmin
+  const userRole = req.user.role;
+  if (!['admin', 'superAdmin'].includes(userRole)) {
+    const caseDoc = await Case.findById(document.caseId);
+    if (!caseDoc) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Associated case not found');
+    }
+    const isMember =
+      (caseDoc as any).clientId?.toString() === userId ||
+      (caseDoc as any).lawyerId?.toString() === userId ||
+      (caseDoc as any).members?.some((m: any) => m.toString() === userId);
+    if (!isMember) {
+      throw new AppError(httpStatus.FORBIDDEN, 'You do not have access to this document');
+    }
+  }
+
+  // Return Cloudinary URL with proper Content-Disposition guidance
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -495,7 +523,65 @@ const downloadDocument = catchAsync(async (req, res) => {
     data: {
       downloadUrl: document.cloudinaryUrl,
       fileName: document.fileName,
+      fileType: document.fileType,
+      fileSize: document.fileSize,
     },
+  });
+});
+
+/**
+ * Batch download — return download URLs for multiple documents
+ * POST /documents/batch-download
+ * Body: { caseId, documentIds: string[] }
+ * WBS-5.5
+ */
+const batchDownload = catchAsync(async (req, res) => {
+  const { caseId, documentIds } = req.body;
+  const { userId } = req.user;
+
+  if (!caseId || !Array.isArray(documentIds) || !documentIds.length) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'caseId and non-empty documentIds array are required');
+  }
+
+  if (documentIds.length > 20) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Maximum 20 documents per batch download');
+  }
+
+  // Ownership check for the case
+  const userRole = req.user.role;
+  if (!['admin', 'superAdmin'].includes(userRole)) {
+    const caseDoc = await Case.findById(caseId).catch(() => Case.findOne({ id: caseId }));
+    if (!caseDoc) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
+    }
+    const isMember =
+      (caseDoc as any).clientId?.toString() === userId ||
+      (caseDoc as any).lawyerId?.toString() === userId ||
+      (caseDoc as any).members?.some((m: any) => m.toString() === userId);
+    if (!isMember) {
+      throw new AppError(httpStatus.FORBIDDEN, 'You do not have access to this case');
+    }
+  }
+
+  const documents = await DocumentModel.find({ id: { $in: documentIds } });
+
+  const results = documentIds.map((docId) => {
+    const doc = documents.find((d) => d.id === docId);
+    if (!doc) return { documentId: docId, error: 'Not found' };
+    return {
+      documentId: docId,
+      downloadUrl: doc.cloudinaryUrl,
+      fileName: doc.fileName,
+      fileType: doc.fileType,
+      fileSize: doc.fileSize,
+    };
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: `Batch download URLs for ${results.filter((r) => !r.error).length}/${documentIds.length} documents`,
+    data: results,
   });
 });
 
@@ -601,6 +687,7 @@ export const DocumentControllers = {
   deleteDocument,
   reanalyzeDocument,
   downloadDocument,
+  batchDownload,
   getDocumentContent,
   updateDocumentSummary,
   getAllDocuments,
