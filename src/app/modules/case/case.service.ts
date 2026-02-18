@@ -83,24 +83,33 @@ const getAllCases = async (userId: string, query: TCaseQuery) => {
 
   const sharedCaseIds = sharedCaseAccess.map(access => access.caseId);
 
+  const accessScope: any[] = [
+    { createdBy: user._id },
+    { _id: { $in: sharedCaseIds } },
+    { clientId: user._id },
+  ];
+
   const filter: any = {
-    $or: [
-      { createdBy: user._id },
-      { _id: { $in: sharedCaseIds } }
-    ],
     isDeleted: { $ne: true }
   };
 
-  // Phase 7: Exclude archived by default unless explicitly requested
-  if (!includeArchived) {
-    filter.status = { $ne: 'archived' };
+  if (search) {
+    filter.$and = [
+      { $or: accessScope },
+      {
+        $or: [
+          { title: { $regex: search, $options: 'i' } },
+          { caseNumber: { $regex: search, $options: 'i' } },
+        ],
+      },
+    ];
+  } else {
+    filter.$or = accessScope;
   }
 
-  if (search) {
-    filter.$or = [
-      { title: { $regex: search, $options: 'i' } },
-      { caseNumber: { $regex: search, $options: 'i' } },
-    ];
+  // Phase 7: Exclude archived by default unless explicitly requested
+  if (!includeArchived && !status) {
+    filter.status = { $ne: 'archived' };
   }
 
   if (status) {
@@ -143,17 +152,32 @@ const getCaseById = async (caseId: string, userId: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
 
-  const caseData = await Case.findOne({ id: caseId }).populate(
+  let caseData = await Case.findOne({ id: caseId }).populate(
     'createdBy',
     'id fullName email',
   );
+
+  if (!caseData && /^[a-fA-F0-9]{24}$/.test(caseId)) {
+    caseData = await Case.findById(caseId).populate(
+      'createdBy',
+      'id fullName email',
+    );
+  }
 
   if (!caseData) {
     throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
   }
 
-  // Verify user owns the case
-  if (caseData.createdBy._id.toString() !== user._id.toString()) {
+  const isOwner = caseData.createdBy._id.toString() === user._id.toString();
+  const isPrimaryClient = caseData.clientId?.toString() === user._id.toString();
+  const hasSharedAccess = await CaseAccessModel.exists({
+    caseId: caseData._id,
+    userId: user._id,
+    status: 'active',
+  });
+  const isPrivileged = user.role === 'admin' || user.role === 'superAdmin';
+
+  if (!isOwner && !isPrimaryClient && !hasSharedAccess && !isPrivileged) {
     throw new AppError(httpStatus.FORBIDDEN, 'You are not authorized to access this case');
   }
 
