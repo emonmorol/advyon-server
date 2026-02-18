@@ -223,6 +223,26 @@ router.patch('/:caseId/restore',
   auth(),
   CaseControllers.restoreCase);
 
+// WBS-4.2: Get archived cases
+router.get('/archived',
+  auth(),
+  CaseControllers.getArchivedCases);
+
+// WBS-4.2: Permanent delete a case (must be archived first)
+router.delete('/:caseId/permanent',
+  auth(),
+  CaseControllers.permanentDeleteCase);
+
+// WBS-5.1: Check for duplicate cases
+router.post('/check-duplicate',
+  auth(),
+  CaseControllers.checkDuplicateCase);
+
+// WBS-5.1: Get case templates
+router.get('/templates',
+  auth(),
+  CaseControllers.getCaseTemplates);
+
 // =========================================================================
 // Document Routes for Case
 // =========================================================================

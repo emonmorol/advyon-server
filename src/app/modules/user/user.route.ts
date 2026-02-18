@@ -144,6 +144,49 @@ router.get(
 
 /**
  * @swagger
+ * /users/clients/{id}:
+ *   get:
+ *     summary: Get client details (Lawyer only)
+ *     description: Retrieves detailed client info, associated cases, and billing stats.
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Client details retrieved
+ */
+router.get(
+  '/clients/:id',
+  auth('lawyer'),
+  UserControllers.getClientDetail
+);
+
+/**
+ * @swagger
+ * /users/clients/{id}:
+ *   delete:
+ *     summary: Archive client (Lawyer only)
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Client archived
+ */
+router.delete(
+  '/clients/:id',
+  auth('lawyer'),
+  UserControllers.archiveClient
+);
+
+/**
+ * @swagger
  * /users/me/profile:
  *   patch:
  *     summary: Update my profile
@@ -261,6 +304,25 @@ router.patch(
   '/me/preferences',
   auth(),
   UserControllers.updateMyPreferences,
+);
+
+// WBS-4.1: Personalization routes
+router.get(
+  '/me/personalization',
+  auth(),
+  UserControllers.getPersonalization,
+);
+
+router.put(
+  '/me/personalization',
+  auth(),
+  UserControllers.updatePersonalization,
+);
+
+router.post(
+  '/me/behavior',
+  auth(),
+  UserControllers.trackBehavior,
 );
 
 /**
