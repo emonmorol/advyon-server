@@ -2,6 +2,7 @@ import httpStatus from 'http-status';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
 import { AnalyticsService } from './analytics.service';
+import { SupportKpiService } from './support-kpi.service';
 
 /**
  * WBS-8.1: Analytics Controller
@@ -76,9 +77,24 @@ const getRevenueMetrics = catchAsync(async (req, res) => {
   });
 });
 
+const getSupportTicketKpis = catchAsync(async (req, res) => {
+  const rangeDays = req.query.rangeDays
+    ? Number(req.query.rangeDays)
+    : 30;
+  const data = await SupportKpiService.getSupportTicketKpis(rangeDays);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Support ticket KPIs retrieved successfully',
+    data,
+  });
+});
+
 export const AnalyticsControllers = {
   getCaseMetrics,
   getClientMetrics,
   getUpcomingDeadlines,
   getRevenueMetrics,
+  getSupportTicketKpis,
 };

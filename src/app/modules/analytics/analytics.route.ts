@@ -114,4 +114,11 @@ router.get(
   AnalyticsControllers.getRevenueMetrics,
 );
 
+router.get(
+  '/support-tickets',
+  auth('admin', 'superAdmin'),
+  validateRequest(AnalyticsValidation.getSupportKpiValidation),
+  AnalyticsControllers.getSupportTicketKpis,
+);
+
 export const AnalyticsRoutes = router;

@@ -30,4 +30,11 @@ export default {
   stripe_webhook_secret: process.env.STRIPE_WEBHOOK_SECRET,
   metadata_cache_ttl: process.env.METADATA_CACHE_TTL_MS,
   metadata_db_enabled: process.env.METADATA_DB_ENABLED,
+  support_kpi_enabled: process.env.SUPPORT_KPI_ENABLED,
+  contact_email_from: process.env.CONTACT_EMAIL_FROM,
+  contact_email_to: process.env.CONTACT_EMAIL_TO,
+  contact_smtp_host: process.env.CONTACT_SMTP_HOST,
+  contact_smtp_port: process.env.CONTACT_SMTP_PORT,
+  contact_smtp_user: process.env.CONTACT_SMTP_USER,
+  contact_smtp_pass: process.env.CONTACT_SMTP_PASS,
 };

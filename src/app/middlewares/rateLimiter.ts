@@ -54,6 +54,18 @@ export const paymentRateLimiter = rateLimit({
   },
 });
 
+export const contactRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    statusCode: 429,
+    message: 'Too many contact submissions. Please wait before trying again.',
+  },
+});
+
 /**
  * Webhook rate limiter — higher threshold for Stripe webhooks.
  * Allows 200 requests per minute per IP (Stripe may send bursts).
