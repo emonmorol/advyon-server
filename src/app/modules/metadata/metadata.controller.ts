@@ -8,7 +8,7 @@ import {
 import { MetadataServices } from './metadata.service';
 import { Request } from 'express';
 
-const parseBool = (value?: string | string[]) => {
+const parseBool = (value?: string | string[]): boolean => {
   if (Array.isArray(value)) {
     return value.some(item => parseBool(item));
   }

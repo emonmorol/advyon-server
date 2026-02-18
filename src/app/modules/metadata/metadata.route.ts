@@ -106,6 +106,7 @@ router.delete(
       statusCode: httpStatus.OK,
       success: true,
       message: 'Metadata cache cleared',
+      data: null,
     });
   },
 );
