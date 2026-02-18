@@ -16,11 +16,11 @@ if (!STRIPE_SECRET_KEY) {
 
 /**
  * Singleton Stripe SDK instance.
- * Configured with API version 2024-12-18.acacia for stability.
+ * Configured with the Stripe SDK-supported pinned API version.
  */
 export const stripe = STRIPE_SECRET_KEY
   ? new Stripe(STRIPE_SECRET_KEY, {
-      apiVersion: '2025-01-27.acacia',
+      apiVersion: '2026-01-28.clover',
       typescript: true,
     })
   : null;
