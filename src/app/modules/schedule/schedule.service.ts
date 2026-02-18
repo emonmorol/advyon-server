@@ -2,7 +2,9 @@ import httpStatus from 'http-status';
 import AppError from '../../errors/appError';
 import { Schedule } from './schedule.model';
 import { ISchedule } from './schedule.interface';
-import { FilterQuery } from 'mongoose';
+import { FilterQuery, Types } from 'mongoose';
+import { User } from '../user/user.model';
+import { Case } from '../case/case.model';
 
 /**
  * WBS-6.1: Schedule Service
@@ -16,8 +18,10 @@ const checkConflict = async (
   endTime: string,
   excludeEventId?: string
 ): Promise<boolean> => {
+  const participantId = await resolveUserObjectId(userId);
+
   const query: FilterQuery<ISchedule> = {
-    participants: userId,
+    participants: participantId,
     date: date,
     status: { $ne: 'cancelled' },
     $or: [
@@ -71,14 +75,58 @@ const generateRecurringInstances = (originalPayload: ISchedule): Partial<ISchedu
   return instances;
 };
 
+const resolveUserObjectId = async (userIdentifier: string) => {
+  const user = Types.ObjectId.isValid(userIdentifier)
+    ? await User.findById(userIdentifier)
+    : await User.findOne({ id: userIdentifier });
+
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  return user._id;
+};
+
+const resolveCaseObjectId = async (caseIdentifier: string) => {
+  const caseData = Types.ObjectId.isValid(caseIdentifier)
+    ? await Case.findById(caseIdentifier)
+    : await Case.findOne({ id: caseIdentifier });
+
+  if (!caseData) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
+  }
+
+  return caseData._id;
+};
+
 const createEvent = async (payload: ISchedule): Promise<ISchedule> => {
+  const createdById = await resolveUserObjectId(payload.createdBy as unknown as string);
+  const caseObjectId = await resolveCaseObjectId(payload.caseId as unknown as string);
+
+  const normalizedParticipants = await Promise.all(
+    (payload.participants || []).map((participant) =>
+      resolveUserObjectId(participant as unknown as string),
+    ),
+  );
+
+  if (!normalizedParticipants.some((participant) => participant.equals(createdById))) {
+    normalizedParticipants.push(createdById);
+  }
+
+  const normalizedPayload: ISchedule = {
+    ...payload,
+    createdBy: createdById as any,
+    caseId: caseObjectId as any,
+    participants: normalizedParticipants as any,
+  };
+
   // 1. Check conflicts for the main participant (creator)
   // strict conflict check can be optional based on preferences, but let's enforce it for main user
   const hasConflict = await checkConflict(
-    payload.createdBy.toString(),
-    new Date(payload.date),
-    payload.startTime,
-    payload.endTime
+    String(createdById),
+    new Date(normalizedPayload.date),
+    normalizedPayload.startTime,
+    normalizedPayload.endTime
   );
 
   if (hasConflict) {
@@ -86,11 +134,11 @@ const createEvent = async (payload: ISchedule): Promise<ISchedule> => {
   }
 
   // 2. Create the main event
-  const event = await Schedule.create(payload);
+  const event = await Schedule.create(normalizedPayload);
 
   // 3. Handle recurrence
-  if (payload.recurrence) {
-    const instances = generateRecurringInstances(payload);
+  if (normalizedPayload.recurrence) {
+    const instances = generateRecurringInstances(normalizedPayload);
     if (instances.length > 0) {
       const instancesWithParent = instances.map(i => ({
         ...i,
@@ -109,7 +157,10 @@ const getAllEvents = async (query: Record<string, unknown>): Promise<ISchedule[]
   const filter: FilterQuery<ISchedule> = {};
 
   if (caseId) filter.caseId = caseId;
-  if (userId) filter.participants = userId; // Basic participation check
+  if (userId) {
+    const participantId = await resolveUserObjectId(String(userId));
+    filter.participants = participantId;
+  }
   if (startDate && endDate) {
     filter.date = {
       $gte: new Date(startDate as string),
@@ -150,6 +201,8 @@ const deleteEvent = async (id: string): Promise<ISchedule | null> => {
 };
 
 const getTodaySchedule = async (userId: string): Promise<ISchedule[]> => {
+  const participantId = await resolveUserObjectId(userId);
+
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
@@ -157,7 +210,7 @@ const getTodaySchedule = async (userId: string): Promise<ISchedule[]> => {
   endOfDay.setHours(23, 59, 59, 999);
 
   const result = await Schedule.find({
-    participants: userId,
+    participants: participantId,
     date: {
       $gte: startOfDay,
       $lte: endOfDay

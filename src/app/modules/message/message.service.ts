@@ -1,16 +1,29 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import httpStatus from 'http-status';
+import { randomUUID } from 'crypto';
 import { Types } from 'mongoose';
-import { v4 as uuidv4 } from 'uuid';
 import AppError from '../../errors/appError';
-import { Message, IMessage } from './message.model';
+import { Message } from './message.model';
 import { User } from '../user/user.model';
+import { Case } from '../case/case.model';
 import { socketService, SOCKET_EVENTS } from '../socket/socket.service';
 
 /**
  * WBS-7.2: Message Service
  * Enhanced with threading, attachments, and search.
  */
+
+const resolveCaseObjectId = async (caseIdentifier: string) => {
+  const caseData = Types.ObjectId.isValid(caseIdentifier)
+    ? await Case.findById(caseIdentifier)
+    : await Case.findOne({ id: caseIdentifier });
+
+  if (!caseData) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
+  }
+
+  return caseData._id;
+};
 
 // Get messages for a user (receiver) with pagination
 const getMessagesForUser = async (
@@ -146,11 +159,12 @@ const createMessage = async (
     priority: payload.priority || 'medium',
     status: 'unread',
     attachments: payload.attachments || [],
-    threadId: payload.threadId || (payload.caseId ? undefined : uuidv4()), // If caseId provided, maybe use caseId as thread grouping key, or generate one
+    threadId: payload.threadId || (payload.caseId ? undefined : randomUUID()), // If caseId provided, maybe use caseId as thread grouping key, or generate one
   };
 
   if (payload.caseId) {
-    messageData.caseId = new Types.ObjectId(payload.caseId);
+    const caseObjectId = await resolveCaseObjectId(payload.caseId);
+    messageData.caseId = caseObjectId;
     if (!messageData.threadId) messageData.threadId = payload.caseId; // Default threadId to caseId if not explicit
   }
 
@@ -242,8 +256,10 @@ const toggleStar = async (messageId: string, userId: string) => {
 
 // Get threads for a case
 const getCaseThreads = async (caseId: string) => {
+  const caseObjectId = await resolveCaseObjectId(caseId);
+
   const messages = await Message.aggregate([
-    { $match: { caseId: new Types.ObjectId(caseId) } },
+    { $match: { caseId: caseObjectId } },
     { $sort: { createdAt: 1 } },
     {
       $group: {

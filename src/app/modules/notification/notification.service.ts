@@ -5,6 +5,7 @@ import { User } from '../user/user.model';
 import { NotificationModel } from './notification.model';
 import { TNotification } from './notification.interface';
 import { Types } from 'mongoose';
+import { Case } from '../case/case.model';
 
 /**
  * WBS-9.1: Notification Service
@@ -23,11 +24,42 @@ const sendWebPush = async (userId: string, title: string, body: string) => {
   return true;
 };
 
+const resolveUserByIdentifier = async (userIdentifier: string | Types.ObjectId) => {
+  const identifier = String(userIdentifier);
+
+  const user = Types.ObjectId.isValid(identifier)
+    ? await User.findById(identifier)
+    : await User.findOne({ id: identifier });
+
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  return user;
+};
+
 const sendNotification = async (payload: Partial<TNotification>) => {
-  // Validate recipient
-  const recipient = await User.findById(payload.recipientId);
-  if (!recipient) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Recipient user not found');
+  if (!payload.recipientId) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Recipient is required');
+  }
+
+  const recipient = await resolveUserByIdentifier(payload.recipientId as any);
+  const sender = payload.senderId
+    ? await resolveUserByIdentifier(payload.senderId as any)
+    : null;
+
+  let caseObjectId: Types.ObjectId | undefined;
+  if (payload.caseId) {
+    const caseIdentifier = String(payload.caseId);
+    const caseData = Types.ObjectId.isValid(caseIdentifier)
+      ? await Case.findById(caseIdentifier)
+      : await Case.findOne({ id: caseIdentifier });
+
+    if (!caseData) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Case not found');
+    }
+
+    caseObjectId = caseData._id;
   }
 
   // Idempotency check
@@ -41,6 +73,9 @@ const sendNotification = async (payload: Partial<TNotification>) => {
   // Save in-app notification
   const notification = await NotificationModel.create({
     ...payload,
+    recipientId: recipient._id,
+    senderId: sender?._id,
+    caseId: caseObjectId,
     isRead: false,
   });
 
@@ -62,8 +97,9 @@ const sendNotification = async (payload: Partial<TNotification>) => {
 };
 
 const getUserNotifications = async (userId: string, query: any) => {
+  const user = await resolveUserByIdentifier(userId);
   const { page = 1, limit = 10, isRead } = query;
-  const filter: any = { recipientId: userId };
+  const filter: any = { recipientId: user._id };
 
   if (isRead !== undefined) {
     filter.isRead = isRead === 'true';
@@ -77,7 +113,7 @@ const getUserNotifications = async (userId: string, query: any) => {
     .limit(Number(limit));
 
   const total = await NotificationModel.countDocuments(filter);
-  const unreadCount = await NotificationModel.countDocuments({ recipientId: userId, isRead: false });
+  const unreadCount = await NotificationModel.countDocuments({ recipientId: user._id, isRead: false });
 
   return {
     data: notifications,
@@ -92,9 +128,11 @@ const getUserNotifications = async (userId: string, query: any) => {
 };
 
 const markAsRead = async (notificationId: string, userId: string) => {
+  const user = await resolveUserByIdentifier(userId);
+
   const notification = await NotificationModel.findOne({
     _id: notificationId,
-    recipientId: userId
+    recipientId: user._id
   });
 
   if (!notification) {
@@ -107,17 +145,21 @@ const markAsRead = async (notificationId: string, userId: string) => {
 };
 
 const markAllAsRead = async (userId: string) => {
+  const user = await resolveUserByIdentifier(userId);
+
   await NotificationModel.updateMany(
-    { recipientId: userId, isRead: false },
+    { recipientId: user._id, isRead: false },
     { $set: { isRead: true } }
   );
   return { message: 'All notifications marked as read' };
 };
 
 const deleteNotification = async (notificationId: string, userId: string) => {
+  const user = await resolveUserByIdentifier(userId);
+
   const result = await NotificationModel.findOneAndDelete({
     _id: notificationId,
-    recipientId: userId,
+    recipientId: user._id,
   });
 
   if (!result) {
