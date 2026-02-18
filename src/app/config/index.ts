@@ -28,4 +28,6 @@ export default {
   stripe_secret_key: process.env.STRIPE_SECRET_KEY,
   stripe_publishable_key: process.env.STRIPE_PUBLISHABLE_KEY,
   stripe_webhook_secret: process.env.STRIPE_WEBHOOK_SECRET,
+  metadata_cache_ttl: process.env.METADATA_CACHE_TTL_MS,
+  metadata_db_enabled: process.env.METADATA_DB_ENABLED,
 };
