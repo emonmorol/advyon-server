@@ -133,6 +133,78 @@ const getContextProfile = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const createOrUpdateChat = catchAsync(async (req: Request, res: Response) => {
+  const { chatId, message, context } = req.body;
+  
+  console.log('createOrUpdateChat params:', { chatId, message, userId: req.user.userId });
+
+  let result;
+  if (chatId) {
+    result = await AIService.continueChat(chatId, message);
+  } else {
+    result = await AIService.createChat(req.user.userId, message, context);
+  }
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: chatId ? 'Chat continued' : 'Chat started',
+    data: result,
+  });
+});
+
+const getUserChats = catchAsync(async (req: Request, res: Response) => {
+  console.log('getUserChats userId:', req.user.userId);
+  const result = await AIService.getUserChats(req.user.userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'User chats retrieved',
+    data: result,
+  });
+});
+
+const getChat = catchAsync(async (req: Request, res: Response) => {
+  const result = await AIService.getChat(req.params.id);
+  // Ensure user owns the chat
+  if (!result || result.userId.toString() !== req.user.userId) {
+     return sendResponse(res, {
+      statusCode: 404, // or 403
+      success: false,
+      message: 'Chat not found',
+      data: null
+    });
+  }
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Chat retrieved',
+    data: result,
+  });
+});
+
+const deleteChat = catchAsync(async (req: Request, res: Response) => {
+  const chat = await AIService.getChat(req.params.id);
+   if (!chat || chat.userId.toString() !== req.user.userId) {
+     return sendResponse(res, {
+      statusCode: 404,
+      success: false,
+      message: 'Chat not found',
+      data: null
+    });
+  }
+
+  await AIService.deleteChat(req.params.id);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Chat deleted',
+    data: null,
+  });
+});
+
+
 export const AIController = {
   chatWithAI,
   runTool,
@@ -140,4 +212,8 @@ export const AIController = {
   exportToolHistory,
   getToolMetrics,
   getContextProfile,
+  createOrUpdateChat,
+  getUserChats,
+  getChat,
+  deleteChat
 };

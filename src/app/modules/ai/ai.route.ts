@@ -39,6 +39,12 @@ router.get(
   AIController.getContextProfile,
 );
 
+// Chat Persistence Routes
+router.post('/chats', auth(), validateRequest(AIValidation.createChatValidation), AIController.createOrUpdateChat);
+router.get('/chats', auth(), AIController.getUserChats);
+router.get('/chats/:id', auth(), AIController.getChat);
+router.delete('/chats/:id', auth(), AIController.deleteChat);
+
 // Route for manual AI analysis trigger (matching client useAIStore logic)
 // POST /ai/documents/analyze { documentId: "..." }
 // We can reuse the reanalyzeDocument controller from Document module or create a wrapper

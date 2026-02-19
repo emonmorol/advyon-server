@@ -65,4 +65,12 @@ export const AIValidation = {
       caseId: z.string().trim().optional(),
     }),
   }),
+
+  createChatValidation: z.object({
+    body: z.object({
+      chatId: z.string().trim().optional(),
+      message: z.string().trim().min(1).max(6000),
+      context: z.any().optional(),
+    }),
+  }),
 };
