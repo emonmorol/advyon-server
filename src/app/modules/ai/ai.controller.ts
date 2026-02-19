@@ -140,7 +140,7 @@ const createOrUpdateChat = catchAsync(async (req: Request, res: Response) => {
 
   let result;
   if (chatId) {
-    result = await AIService.continueChat(chatId, message);
+    result = await AIService.continueChat(chatId, message, context);
   } else {
     result = await AIService.createChat(req.user.userId, message, context);
   }

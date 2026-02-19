@@ -68,9 +68,21 @@ export const AIValidation = {
 
   createChatValidation: z.object({
     body: z.object({
-      chatId: z.string().trim().optional(),
-      message: z.string().trim().min(1).max(6000),
+      chatId: z.string().trim().optional().nullable(),
+      message: z.string().trim().min(1).max(20000), // Increased limit for larger context if needed
       context: z.any().optional(),
+    }),
+  }),
+
+  getChatValidation: z.object({
+    params: z.object({
+      id: z.string().trim().min(1),
+    }),
+  }),
+
+  deleteChatValidation: z.object({
+    params: z.object({
+      id: z.string().trim().min(1),
     }),
   }),
 };

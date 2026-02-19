@@ -10,11 +10,7 @@ export interface IAIChat extends Document {
   userId: Types.ObjectId;
   title: string;
   messages: IChatMessage[];
-  context: {
-    caseId?: string;
-    documentIds?: string[];
-    threadIds?: string[];
-  };
+  context: any;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -49,9 +45,8 @@ const AIChatSchema = new Schema<IAIChat>(
       },
     ],
     context: {
-      caseId: { type: String },
-      documentIds: [{ type: String }],
-      threadIds: [{ type: String }],
+      type: Schema.Types.Mixed,
+      default: {},
     },
   },
   {

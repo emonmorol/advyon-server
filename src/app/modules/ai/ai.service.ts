@@ -189,19 +189,36 @@ const createChat = async (userId: string, message: string, context?: any) => {
     return chat;
 };
 
-const continueChat = async (chatId: string, message: string) => {
+const continueChat = async (chatId: string, message: string, context?: any) => {
     const chat = await AIChatModel.findById(chatId);
     if (!chat) throw new Error('Chat not found');
+
+    // Update context if provided
+    if (context) {
+        // dynamic merge or overwrite? For now, let's assume we might want to accumulate or replace.
+        // If it's an array of items (which frontend sends), we might want to check for duplicates?
+        // Simple approach: Replace context with new context or merge?
+        // Let's assume the frontend sends the *active* context for this turn.
+        // If we want the AI to know about ALL context ever sent, we should probably merge.
+        // But for "Chat with specific context" usually means "Here is the context for this question".
+        // However, persistent chat implies context retention.
+        // Let's merge: if context has 'items', append them?
+        // For Mixed type, let's just save what we get for now, or maybe intelligent merge if it's valid structure.
+        // Safer: If context is provided, update the chat's context field.
+         chat.context = context; // Replaces previous context with the current relevant context
+    }
 
     // Append user message
     chat.messages.push({ role: 'user', content: message, timestamp: new Date() });
     await chat.save();
 
     // Prepare history for AI
-    const history: TChatHistory[] = chat.messages.map(m => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content
-    })).filter(m => m.role !== 'system'); // Exclude system messages from history if any stored (though currently we don't store system as message doc usually)
+    const history: TChatHistory[] = chat.messages
+        .filter(m => m.role !== 'system')
+        .map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content
+        }));
     
     // Context logic
     const contextString = chat.context ? JSON.stringify(chat.context) : '';
@@ -209,12 +226,8 @@ const continueChat = async (chatId: string, message: string) => {
     ${contextString ? `CONTEXT:\n${contextString}` : ''}
     INSTRUCTION: Keep your answers short and precise.`;
 
-    // Only pass previous messages as history, distinct from the current one which OpenRouterService adds?
-    // OpenRouterService.processChat adds the *current* message to the history list it sends. 
-    // It takes (message, history, context). 
-    // `history` here should be PAST messages.
-    // My `history` array above includes the just-added user message. 
-    // I should exclude the last user message from `history` passed to `processChat` because `processChat` appends the `message` argument.
+    // Exclude the last message (current user message) from history passed to processChat, 
+    // because processChat appends the message argument to history.
     const pastHistory = history.slice(0, -1); 
 
     const aiResponse = await OpenRouterService.processChat(message, pastHistory, systemContext);
