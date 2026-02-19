@@ -140,8 +140,21 @@ Respond as:
   );
 
   try {
-    const jsonMatch = output.match(/\{[\s\S]*\}/);
-    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : output);
+    // Robust cleaning of the response
+    let cleanedOutput = output
+      .replace(/```json\n?/gi, '') // Remove start of markdown code block
+      .replace(/```\n?/gi, '')     // Remove end of markdown code block
+      .trim();
+
+    // Find the JSON object bounds if there's extra text
+    const jsonMatch = cleanedOutput.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanedOutput = jsonMatch[0];
+    }
+
+    const parsed = JSON.parse(cleanedOutput);
+
+    // If parsing succeeds, return the cleaned fields
     return {
       summary: sanitizeUserGeneratedText(parsed.summary || ''),
       legalReferences: Array.isArray(parsed.refs)
@@ -149,6 +162,17 @@ Respond as:
         : [],
     };
   } catch (_error) {
+    // Fallback: If JSON parsing fails, we don't want to show the raw JSON prompt/output.
+    // Instead, just return the raw text if it looks like a paragraph, or a generic message.
+    
+    // If the output looks like a JSON object we failed to parse, don't show it.
+    if (output.trim().startsWith('{') || output.includes('"summary":')) {
+         return {
+            summary: "AI Summary generation failed to format correctly. Please try regenerating.",
+            legalReferences: []
+         };
+    }
+
     return {
       summary: sanitizeUserGeneratedText(output),
       legalReferences: [],

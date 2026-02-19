@@ -11,6 +11,7 @@ import {
   TModerationTargetType,
 } from './community.moderation.interface';
 import { ModerationAppeal, ModerationReview } from './community.moderation.model';
+import { openrouterClient, OPENROUTER_MODEL } from '../../config/openrouter.config';
 
 const DEFAULT_MODERATION_THRESHOLD = Number(
   process.env.COMMUNITY_MODERATION_THRESHOLD || 0.72,
@@ -89,8 +90,6 @@ const PERSONAL_ATTACK_PATTERNS: RegExp[] = [
   /\byour\s+(argument|case|post)\s+is\s+(trash|stupid|garbage|worthless)\b/i,
 ];
 
-let toxicityModel: any = null;
-let toxicityModelLoadPromise: Promise<any> | null = null;
 let queueWorkerRunning = false;
 
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
@@ -151,56 +150,54 @@ const calculateKeywordToxicityScore = (content: string): number => {
   return clamp01(Math.max(severeWeight, keywordWeight + personalAttackWeight + aggressionWeight));
 };
 
-const loadToxicityModel = async (): Promise<any> => {
-  if (toxicityModel) return toxicityModel;
-  if (toxicityModelLoadPromise) return toxicityModelLoadPromise;
+const classifyWithLLM = async (content: string): Promise<{
+    decision: 'approved' | 'flagged' | 'rejected';
+    reason: string;
+    toxicityScore: number;
+}> => {
+    if (!openrouterClient) return { decision: 'approved', reason: '', toxicityScore: 0 };
 
-  toxicityModelLoadPromise = (async () => {
-    try {
-      const tf = (await (eval('import("@tensorflow/tfjs")') as Promise<any>)) as any;
-      if (typeof tf?.ready === 'function') {
-        await tf.ready();
-      }
+    const prompt = `
+    Role: Community Moderator for a Professional Legal Operations Platform (Advyon).
+    Task: Evaluate if the following post violates community standards.
+    
+    Standards:
+    - No hate speech, harassment, threats, or severe toxicity.
+    - No spam or blatant self-promotion.
+    - Content must be reasonably relevant to legal professionals, law students, or clients seeking legal help.
+    - Professional disagreement is allowed; personal attacks are not.
 
-      const toxicityModule = (await (eval('import("@tensorflow-models/toxicity")') as Promise<any>)) as any;
-      toxicityModel = await toxicityModule.load(0.85);
-      return toxicityModel;
-    } catch (error) {
-      console.warn('[Moderation] Toxicity model unavailable. Falling back to rule-based scoring.', error);
-      toxicityModel = null;
-      return null;
-    } finally {
-      toxicityModelLoadPromise = null;
+    Content to Review:
+    "${content}"
+
+    Output JSON only:
+    {
+        "verdict": "approved" | "flagged" | "rejected",
+        "message": "Short reason for decision (max 1 sentence)",
+        "toxicityScore": 0.0 to 1.0 (0 = safe, 1 = dangerous)
     }
-  })();
+    `;
 
-  return toxicityModelLoadPromise;
-};
+    try {
+        const completion = await openrouterClient.chat.completions.create({
+            model: OPENROUTER_MODEL,
+            messages: [{ role: 'user', content: prompt }],
+            response_format: { type: 'json_object' }
+        });
 
-const calculateModelToxicityScore = async (content: string): Promise<number> => {
-  const model = await loadToxicityModel();
-  if (!model || typeof model.classify !== 'function') {
-    return 0;
-  }
+        const raw = completion.choices[0]?.message?.content || '{}';
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        const result = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
 
-  try {
-    const predictions = (await model.classify([content])) as any[];
-    const probabilities: number[] = [];
-
-    predictions.forEach(prediction => {
-      const result = prediction?.results?.[0];
-      const toxicProbability = result?.probabilities?.[1];
-      if (typeof toxicProbability === 'number') {
-        probabilities.push(toxicProbability);
-      }
-    });
-
-    if (!probabilities.length) return 0;
-    return clamp01(Math.max(...probabilities));
-  } catch (error) {
-    console.warn('[Moderation] Failed to classify with toxicity model, using fallback.', error);
-    return 0;
-  }
+        return {
+            decision: (['approved', 'flagged', 'rejected'].includes(result.verdict) ? result.verdict : 'approved') as any,
+            reason: result.message || '',
+            toxicityScore: typeof result.toxicityScore === 'number' ? result.toxicityScore : 0
+        };
+    } catch (error) {
+        console.warn('[Moderation] LLM check failed, defaulting to approved:', error);
+        return { decision: 'approved', reason: '', toxicityScore: 0 };
+    }
 };
 
 const decisionToSnapshotStatus = (
@@ -221,13 +218,21 @@ const assessContent = async (
   const spamScore = calculateSpamScore(sanitizedContent);
   const offTopicScore = calculateOffTopicScore(sanitizedContent);
   const keywordToxicity = calculateKeywordToxicityScore(sanitizedContent);
-  const modelToxicity = useModel ? await calculateModelToxicityScore(sanitizedContent) : 0;
+  
+  // Use LLM for deeper analysis if requested
+  const llmResult = useModel ? await classifyWithLLM(sanitizedContent) : { toxicityScore: 0, decision: 'approved' as TModerationDecision, reason: '' };
+  
+  const modelToxicity = llmResult.toxicityScore;
   const toxicityScore = clamp01(Math.max(keywordToxicity, modelToxicity));
 
   const confidence = Math.max(toxicityScore, spamScore, offTopicScore);
   let decision: TModerationDecision = 'approved';
 
-  if (toxicityScore >= 0.9) {
+  // Decision logic:
+  // 1. LLM rejection overrides everything
+  if (llmResult.decision === 'rejected') {
+      decision = 'rejected';
+  } else if (toxicityScore >= 0.9) {
     decision = 'rejected';
   } else if (toxicityScore >= safeThreshold) {
     decision = 'flagged';
@@ -235,9 +240,12 @@ const assessContent = async (
     decision = 'rejected';
   } else if (confidence >= safeThreshold) {
     decision = 'flagged';
+  } else if (llmResult.decision === 'flagged') {
+      decision = 'flagged';
   }
 
   const reasons: string[] = [];
+  if (llmResult.reason) reasons.push(llmResult.reason);
   if (toxicityScore >= safeThreshold * 0.7) reasons.push('toxicity');
   if (spamScore >= safeThreshold * 0.7) reasons.push('spam');
   if (offTopicScore >= safeThreshold * 0.7) reasons.push('off-topic');
