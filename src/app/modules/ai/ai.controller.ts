@@ -1,9 +1,19 @@
 import { Request, Response } from 'express';
+import httpStatus from 'http-status';
+import AppError from '../../errors/appError';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
 import { AIContextManagerService } from './ai-context-manager.service';
 import { AIService } from './ai.service';
 import { AIToolService } from './ai.tool.service';
+
+const getMongoUserIdOrThrow = (req: Request): string => {
+  if (!req.user.mongoUserId) {
+    throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized!');
+  }
+
+  return req.user.mongoUserId;
+};
 
 const chatWithAI = catchAsync(async (req: Request, res: Response) => {
   const { message, documentId, documentIds, caseId, history } = req.body;
@@ -135,14 +145,20 @@ const getContextProfile = catchAsync(async (req: Request, res: Response) => {
 
 const createOrUpdateChat = catchAsync(async (req: Request, res: Response) => {
   const { chatId, message, context } = req.body;
-  
-  console.log('createOrUpdateChat params:', { chatId, message, userId: req.user.userId });
+  const mongoUserId = getMongoUserIdOrThrow(req);
+
+  console.log('createOrUpdateChat params:', {
+    chatId,
+    message,
+    userId: req.user.userId,
+    mongoUserId,
+  });
 
   let result;
   if (chatId) {
     result = await AIService.continueChat(chatId, message, context);
   } else {
-    result = await AIService.createChat(req.user.userId, message, context);
+    result = await AIService.createChat(mongoUserId, message, context);
   }
 
   sendResponse(res, {
@@ -154,8 +170,9 @@ const createOrUpdateChat = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getUserChats = catchAsync(async (req: Request, res: Response) => {
-  console.log('getUserChats userId:', req.user.userId);
-  const result = await AIService.getUserChats(req.user.userId);
+  const mongoUserId = getMongoUserIdOrThrow(req);
+  console.log('getUserChats userId:', req.user.userId, 'mongoUserId:', mongoUserId);
+  const result = await AIService.getUserChats(mongoUserId);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -165,9 +182,10 @@ const getUserChats = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getChat = catchAsync(async (req: Request, res: Response) => {
+  const mongoUserId = getMongoUserIdOrThrow(req);
   const result = await AIService.getChat(req.params.id);
   // Ensure user owns the chat
-  if (!result || result.userId.toString() !== req.user.userId) {
+  if (!result || result.userId.toString() !== mongoUserId) {
      return sendResponse(res, {
       statusCode: 404, // or 403
       success: false,
@@ -185,8 +203,9 @@ const getChat = catchAsync(async (req: Request, res: Response) => {
 });
 
 const deleteChat = catchAsync(async (req: Request, res: Response) => {
+  const mongoUserId = getMongoUserIdOrThrow(req);
   const chat = await AIService.getChat(req.params.id);
-   if (!chat || chat.userId.toString() !== req.user.userId) {
+   if (!chat || chat.userId.toString() !== mongoUserId) {
      return sendResponse(res, {
       statusCode: 404,
       success: false,

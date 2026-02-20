@@ -55,7 +55,9 @@ const auth = (...requiredRoles: TUserRole[]) => {
         if (req.path === '/sync') {
           req.user = {
             clerkUserId,
-            email,
+            email: email || '',
+            userId: '',
+            mongoUserId: '',
             emailVerified: decoded.email_verified as boolean,
           };
           return next();
@@ -110,6 +112,7 @@ const auth = (...requiredRoles: TUserRole[]) => {
         clerkUserId,
         email: email || '',
         userId: user.id,
+        mongoUserId: user._id.toString(),
         role: user?.role ? (user.role as TUserRole) : 'client',
         emailVerified: true,
       };

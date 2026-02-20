@@ -1,10 +1,19 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
+import { Types } from 'mongoose';
 import { groqClient, AI_MODEL as GROQ_MODEL } from '../../config/groq.config';
 import { openrouterClient, OPENROUTER_VISION_MODEL, isOpenRouterAvailable } from '../../config/openrouter.config';
 import { TAiAnalysis, TDocumentCategory } from '../document/document.interface';
 import { AIChatModel } from './ai-chat.model';
 import { OpenRouterService } from './openrouter.service';
 import { TChatHistory } from './ai.interface';
+
+const toObjectId = (value: string): Types.ObjectId => {
+  if (!Types.ObjectId.isValid(value)) {
+    throw new Error('Invalid MongoDB user identifier.');
+  }
+
+  return new Types.ObjectId(value);
+};
 
 // Valid document categories
 const VALID_CATEGORIES: TDocumentCategory[] = [
@@ -146,28 +155,28 @@ const chatWithAI = async (
         content: msg.content
     }));
 
-    const systemContext = `You are an expert legal assistant named Advyon AI.
+    const systemContext = `You are an expert AI assistant named Advyon AI.
     ${context ? `CONTEXT:\n${context}` : ''}
     INSTRUCTION: Keep your answers short and precise.`;
 
     const response = await OpenRouterService.processChat(message, formattedHistory, systemContext);
     return response;
   } catch (error) {
-    console.error('OpenRouter chat error:', error);
-     if (options?.throwOnFailure) {
-      const message = (error as Error)?.message || 'AI provider request failed.';
-      throw new Error(message);
+    const reason = (error as Error)?.message || 'AI provider request failed.';
+    console.error('OpenRouter chat error:', reason);
+    if (options?.throwOnFailure !== false) {
+      throw new Error(reason);
     }
-    return "I'm having trouble. Please try again.";
+    return `AI provider request failed: ${reason}`;
   }
 };
 
 // --- Persistent Chat Methods ---
 
-const createChat = async (userId: string, message: string, context?: any) => {
+const createChat = async (mongoUserId: string, message: string, context?: any) => {
     // 1. Create new chat doc
     const chat = await AIChatModel.create({
-        userId,
+        userId: toObjectId(mongoUserId),
         title: message.substring(0, 50) + (message.length > 50 ? '...' : ''),
         messages: [{ role: 'user', content: message, timestamp: new Date() }],
         context
@@ -176,7 +185,7 @@ const createChat = async (userId: string, message: string, context?: any) => {
     // 2. Get AI response
     // Construct system prompt with "Keeping answer short and precise"
     const contextString = context ? JSON.stringify(context) : '';
-    const systemContext = `You are an expert legal assistant named Advyon AI.
+    const systemContext = `You are an expert AI assistant named Advyon AI.
     ${contextString ? `CONTEXT:\n${contextString}` : ''}
     INSTRUCTION: Keep your answers short and precise.`;
 
@@ -222,7 +231,7 @@ const continueChat = async (chatId: string, message: string, context?: any) => {
     
     // Context logic
     const contextString = chat.context ? JSON.stringify(chat.context) : '';
-    const systemContext = `You are an expert legal assistant named Advyon AI.
+    const systemContext = `You are an expert AI assistant named Advyon AI.
     ${contextString ? `CONTEXT:\n${contextString}` : ''}
     INSTRUCTION: Keep your answers short and precise.`;
 
@@ -239,8 +248,8 @@ const continueChat = async (chatId: string, message: string, context?: any) => {
     return chat;
 };
 
-const getUserChats = async (userId: string) => {
-    return AIChatModel.find({ userId }).sort({ updatedAt: -1 }).select('title updatedAt createdAt');
+const getUserChats = async (mongoUserId: string) => {
+    return AIChatModel.find({ userId: toObjectId(mongoUserId) }).sort({ updatedAt: -1 }).select('title updatedAt createdAt');
 };
 
 const getChat = async (chatId: string) => {
