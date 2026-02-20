@@ -12,9 +12,23 @@ import {
   TInitiateDocumentPayload,
 } from './document.interface';
 import { generateDocumentId } from './document.utils';
-import { cloudinaryUpload } from '../../config/cloudinary.config';
 import { ActivityService } from '../activity/activity.service';
-import { getSignedUrl } from '../../utils/file.upload.utils';
+import {
+  getSignedUrl,
+  resolveResourceTypeFromUrl,
+  resolveDeliveryTypeFromUrl,
+} from '../../utils/file.upload.utils';
+import path from 'path';
+
+const ensureFileNameHasExtension = (fileName: string, mimeType?: string) => {
+  const ext = path.extname(fileName);
+  if (ext) return fileName;
+  if (!mimeType) return fileName;
+
+  const inferredExt = mimeType.split('/').pop();
+  if (!inferredExt) return fileName;
+  return `${fileName}.${inferredExt}`;
+};
 
 /**
  * Upload a document to a case
@@ -58,12 +72,17 @@ const uploadDocument = async (
   // Extract file info from Cloudinary upload
   const fileType = file.mimetype.split('/')[1];
 
+  const normalizedFileName = ensureFileNameHasExtension(
+    file.originalname,
+    file.mimetype,
+  );
+
   // Create document record
   const document = await DocumentModel.create({
     id: documentId,
     caseId: caseData._id,
     folderName,
-    fileName: file.originalname,
+    fileName: normalizedFileName,
     fileType,
     fileSize: file.size,
     cloudinaryUrl: (file as any).path, // Cloudinary URL
@@ -143,24 +162,28 @@ const getDocumentsByCase = async (
     .populate('uploadedBy', 'id fullName email')
     .sort({ uploadedAt: -1 });
 
-  // WBS-TD-Fix: Map documents to include signed URLs if authenticated
-  const documentsWithSignedUrls = documents.map((doc) => {
+  // Process documents to sign URLs
+  const processedDocuments = documents.map((doc) => {
     const docObj = doc.toObject();
     if (docObj.cloudinaryPublicId) {
       try {
-        // Generate a fresh signed URL (valid for 1 hour)
-        docObj.cloudinaryUrl = getSignedUrl(docObj.cloudinaryPublicId);
+        const resourceType = resolveResourceTypeFromUrl(docObj.cloudinaryUrl);
+        const deliveryType = resolveDeliveryTypeFromUrl(docObj.cloudinaryUrl);
+        docObj.cloudinaryUrl = getSignedUrl(docObj.cloudinaryPublicId, {
+          resourceType,
+          deliveryType,
+        });
       } catch (err) {
-        console.error(`Failed to sign URL for doc ${docObj.id}:`, err);
+        console.error(`Failed to sign URL for doc ${doc.id}:`, err);
       }
     }
     return docObj;
   });
 
-  // Group documents by folder using the signed URL version
+  // Group documents by folder
   const groupedDocuments: TGroupedDocuments = {};
 
-  documentsWithSignedUrls.forEach((doc) => {
+  processedDocuments.forEach((doc) => {
     if (!groupedDocuments[doc.folderName]) {
       groupedDocuments[doc.folderName] = [];
     }
@@ -168,7 +191,7 @@ const getDocumentsByCase = async (
   });
 
   return {
-    documents: documentsWithSignedUrls,
+    documents: processedDocuments,
     groupedByFolder: groupedDocuments,
     total: documents.length,
   };
@@ -277,12 +300,14 @@ const initiateDocumentUpload = async (payload: TInitiateDocumentPayload) => {
   // Generate document ID
   const documentId = await generateDocumentId();
 
+  const normalizedFileName = ensureFileNameHasExtension(fileName, fileType);
+
   // Create initial document record with pending status
   const document = await DocumentModel.create({
     id: documentId,
     caseId: caseData._id,
     folderName,
-    fileName,
+    fileName: normalizedFileName,
     fileType,
     fileSize,
     cloudinaryUrl: '', // Will be updated after upload
@@ -480,9 +505,27 @@ const getAllUserDocuments = async (
     .populate('uploadedBy', 'id fullName email')
     .sort({ uploadedAt: -1 });
 
+  // Process documents to sign URLs
+  const processedDocuments = documents.map((doc) => {
+    const docObj = doc.toObject();
+    if (docObj.cloudinaryPublicId) {
+      try {
+        const resourceType = resolveResourceTypeFromUrl(docObj.cloudinaryUrl);
+        const deliveryType = resolveDeliveryTypeFromUrl(docObj.cloudinaryUrl);
+        docObj.cloudinaryUrl = getSignedUrl(docObj.cloudinaryPublicId, {
+          resourceType,
+          deliveryType,
+        });
+      } catch (err) {
+        console.error(`Failed to sign URL for doc ${doc.id}:`, err);
+      }
+    }
+    return docObj;
+  });
+
   // Group documents by folder
   const groupedByFolder: TGroupedDocuments = {};
-  documents.forEach((doc) => {
+  processedDocuments.forEach((doc) => {
     if (!groupedByFolder[doc.folderName]) {
       groupedByFolder[doc.folderName] = [];
     }
@@ -491,7 +534,7 @@ const getAllUserDocuments = async (
 
   // Group documents by case
   const groupedByCase: { [caseId: string]: { caseInfo: any; documents: any[] } } = {};
-  documents.forEach((doc) => {
+  processedDocuments.forEach((doc) => {
     const caseData = doc.caseId as any;
     if (caseData && caseData.id) {
       if (!groupedByCase[caseData.id]) {
@@ -511,13 +554,13 @@ const getAllUserDocuments = async (
 
   // Get category statistics
   const categoryStats: { [category: string]: number } = {};
-  documents.forEach((doc) => {
+  processedDocuments.forEach((doc) => {
     const category = doc.aiAnalysis?.documentCategory || 'Uncategorized';
     categoryStats[category] = (categoryStats[category] || 0) + 1;
   });
 
   return {
-    documents,
+    documents: processedDocuments,
     groupedByFolder,
     groupedByCase: Object.values(groupedByCase),
     categoryStats,
@@ -537,4 +580,3 @@ export const DocumentServices = {
   autoFileDocument,
   getAllUserDocuments,
 };
-

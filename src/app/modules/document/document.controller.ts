@@ -8,13 +8,16 @@ import { AIService } from '../ai/ai.service';
 import {
   uploadBufferToCloudinary,
   uploadFileToCloudinary,
+  getSignedUrl,
+  resolveResourceTypeFromMime,
+  resolveResourceTypeFromUrl,
+  resolveDeliveryTypeFromUrl,
 } from '../../utils/file.upload.utils';
 import { DocumentModel } from './document.model';
 import { Case } from '../case/case.model';
 import { CaseAccessModel } from '../caseAccess/caseAccess.model';
 import { User } from '../user/user.model';
 import AppError from '../../errors/appError';
-import { getSignedUrl } from '../../utils/file.upload.utils';
 
 const resolveUserByRequestId = async (requestUserId: string) => {
   let user = await User.findOne({ id: requestUserId });
@@ -222,6 +225,7 @@ async function processDocumentUploadAndAI(
   try {
     // Step 1: Upload to Cloudinary
     let cloudinaryResult;
+    const uploadResourceType = resolveResourceTypeFromMime(file.mimetype);
 
     // Check if file is stored on disk (multer diskStorage) or in memory
     if (file.path) {
@@ -230,7 +234,7 @@ async function processDocumentUploadAndAI(
         cloudinaryResult = await uploadFileToCloudinary(file.path, {
           folder: `advyon/cases/${caseIdParam}/documents`,
           publicIdPrefix: `doc_${documentId}`,
-          resourceType: 'auto',
+          resourceType: uploadResourceType,
         });
       } finally {
         // Clean up temp file only if it's a local file, regardless of upload success/failure
@@ -245,7 +249,7 @@ async function processDocumentUploadAndAI(
       cloudinaryResult = await uploadBufferToCloudinary(file.buffer, {
         folder: `advyon/cases/${caseIdParam}/documents`,
         publicIdPrefix: `doc_${documentId}`,
-        resourceType: 'auto',
+        resourceType: uploadResourceType,
       });
     } else {
       throw new Error('File data not available');
@@ -467,7 +471,12 @@ const getDocumentById = catchAsync(async (req, res) => {
   const docObj = document.toObject();
   if (docObj.cloudinaryPublicId) {
     try {
-      docObj.cloudinaryUrl = getSignedUrl(docObj.cloudinaryPublicId);
+      const resourceType = resolveResourceTypeFromUrl(docObj.cloudinaryUrl);
+      const deliveryType = resolveDeliveryTypeFromUrl(docObj.cloudinaryUrl);
+      docObj.cloudinaryUrl = getSignedUrl(docObj.cloudinaryPublicId, {
+        resourceType,
+        deliveryType,
+      });
     } catch (err) {
       console.error(`Failed to sign URL for doc ${document.id}:`, err);
     }
@@ -609,12 +618,22 @@ const downloadDocument = catchAsync(async (req, res) => {
   }
 
   // Return Cloudinary URL with proper Content-Disposition guidance
+  const resourceType = resolveResourceTypeFromUrl(document.cloudinaryUrl);
+  const deliveryType = resolveDeliveryTypeFromUrl(document.cloudinaryUrl);
+  const signedDownloadUrl = document.cloudinaryPublicId
+    ? getSignedUrl(document.cloudinaryPublicId, {
+        resourceType,
+        deliveryType,
+        attachmentFilename: document.fileName,
+      })
+    : document.cloudinaryUrl;
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Download URL retrieved successfully',
     data: {
-      downloadUrl: document.cloudinaryUrl,
+      downloadUrl: signedDownloadUrl,
       fileName: document.fileName,
       fileType: document.fileType,
       fileSize: document.fileSize,
@@ -650,9 +669,18 @@ const batchDownload = catchAsync(async (req, res) => {
   const results = documentIds.map((docId) => {
     const doc = documents.find((d) => d.id === docId);
     if (!doc) return { documentId: docId, error: 'Not found' };
+    const resourceTypeForDoc = resolveResourceTypeFromUrl(doc.cloudinaryUrl);
+    const deliveryTypeForDoc = resolveDeliveryTypeFromUrl(doc.cloudinaryUrl);
+    const signedDownloadUrl = doc.cloudinaryPublicId
+      ? getSignedUrl(doc.cloudinaryPublicId, {
+          resourceType: resourceTypeForDoc,
+          deliveryType: deliveryTypeForDoc,
+          attachmentFilename: doc.fileName,
+        })
+      : doc.cloudinaryUrl;
     return {
       documentId: docId,
-      downloadUrl: doc.cloudinaryUrl,
+      downloadUrl: signedDownloadUrl,
       fileName: doc.fileName,
       fileType: doc.fileType,
       fileSize: doc.fileSize,
@@ -679,19 +707,29 @@ const getDocumentContent = catchAsync(async (req, res) => {
 
   const document = await DocumentServices.getDocumentContent(documentId);
 
-  if (!document.cloudinaryUrl) {
+  const documentResourceType = resolveResourceTypeFromUrl(document.cloudinaryUrl);
+  const deliveryType = resolveDeliveryTypeFromUrl(document.cloudinaryUrl);
+  const sourceUrl = document.cloudinaryPublicId
+    ? getSignedUrl(document.cloudinaryPublicId, {
+        resourceType: documentResourceType,
+        deliveryType: deliveryType,
+      })
+    : document.cloudinaryUrl;
+
+  if (!sourceUrl) {
     throw new AppError(httpStatus.NOT_FOUND, 'Document content not available');
   }
 
-  // Stream the file from Cloudinary
-  const axios = await import('axios');
-  const response = await axios.default.get(document.cloudinaryUrl, {
-    responseType: 'arraybuffer',
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Document content access url',
+    data: {
+      url: sourceUrl,
+      fileType: document.fileType,
+      fileName: document.fileName,
+    },
   });
-
-  res.setHeader('Content-Type', document.fileType || 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${document.fileName}"`);
-  res.send(Buffer.from(response.data));
 });
 
 /**
