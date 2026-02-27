@@ -327,6 +327,38 @@ router.post(
 
 /**
  * @swagger
+ * /users/lawyers:
+ *   get:
+ *     summary: Get all lawyers (Lawyer Directory)
+ *     description: Retrieves a list of lawyers with their profiles for the lawyer directory. Supports search, practiceArea filter, and pagination.
+ *     tags: [Users]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Search by lawyer name
+ *       - in: query
+ *         name: practiceArea
+ *         schema: { type: string }
+ *         description: Filter by practice area
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 12 }
+ *     responses:
+ *       200:
+ *         description: Lawyers retrieved successfully
+ */
+router.get(
+  '/lawyers',
+  auth(),
+  UserControllers.getAllLawyers,
+);
+
+/**
+ * @swagger
  * /users:
  *   get:
  *     summary: Get all users
