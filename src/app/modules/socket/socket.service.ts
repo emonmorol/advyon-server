@@ -27,6 +27,14 @@ export const SOCKET_EVENTS = {
   USER_ONLINE: 'user:online',       // WBS-5.2
   USER_OFFLINE: 'user:offline',     // WBS-5.2
 
+  // Chat events
+  CHAT_MESSAGE: 'chat:message',
+  CHAT_TYPING: 'chat:typing',
+  CHAT_STOP_TYPING: 'chat:stop-typing',
+  CHAT_READ: 'chat:read',
+  CHAT_JOIN: 'chat:join',
+  CHAT_LEAVE: 'chat:leave',
+
   // Client -> Server events
   JOIN_CASE: 'case:join',
   LEAVE_CASE: 'case:leave',
@@ -109,6 +117,29 @@ class SocketService {
       socket.on(SOCKET_EVENTS.LEAVE_CASE, (caseId: string) => {
         socket.leave(`case:${caseId}`);
         console.log(`[Socket] User ${socket.userId} left case:${caseId}`);
+      });
+
+      // Chat room handlers
+      socket.on(SOCKET_EVENTS.CHAT_JOIN, (conversationId: string) => {
+        socket.join(`chat:${conversationId}`);
+      });
+
+      socket.on(SOCKET_EVENTS.CHAT_LEAVE, (conversationId: string) => {
+        socket.leave(`chat:${conversationId}`);
+      });
+
+      socket.on(SOCKET_EVENTS.CHAT_TYPING, (data: { conversationId: string }) => {
+        socket.to(`chat:${data.conversationId}`).emit(SOCKET_EVENTS.CHAT_TYPING, {
+          conversationId: data.conversationId,
+          userId: socket.userId,
+        });
+      });
+
+      socket.on(SOCKET_EVENTS.CHAT_STOP_TYPING, (data: { conversationId: string }) => {
+        socket.to(`chat:${data.conversationId}`).emit(SOCKET_EVENTS.CHAT_STOP_TYPING, {
+          conversationId: data.conversationId,
+          userId: socket.userId,
+        });
       });
 
       socket.on('disconnect', () => {
