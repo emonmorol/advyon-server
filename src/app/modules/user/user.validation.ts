@@ -1,4 +1,7 @@
 import { z } from 'zod';
+
+// Regex to reject emoji characters in name fields
+const noEmoji = /^[^\p{Emoji_Presentation}\p{Extended_Pictographic}]*$/u;
 import { UserStatus } from './user.constant';
 
 const createClientProfileValidationSchema = z.object({
@@ -24,7 +27,7 @@ const createUserValidationSchema = z.object({
     password: z.string().optional(),
     user: z.object({
       email: z.string().email(),
-      fullName: z.string(),
+      fullName: z.string().regex(noEmoji, 'Name cannot contain emoji'),
       role: z.enum(['superAdmin', 'student', 'admin', 'client', 'lawyer', 'judge']),
       status: z.enum([...UserStatus] as [string, ...string[]]).optional(),
     }),
@@ -38,7 +41,7 @@ const updateUserValidationSchema = z.object({
   body: z.object({
     user: z.object({
       email: z.string().email().optional(),
-      fullName: z.string().optional(),
+      fullName: z.string().regex(noEmoji, 'Name cannot contain emoji').optional(),
       role: z.enum(['superAdmin', 'student', 'admin', 'client', 'lawyer', 'judge']).optional(),
       status: z.enum([...UserStatus] as [string, ...string[]]).optional(),
     }).optional(),
