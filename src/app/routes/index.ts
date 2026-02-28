@@ -20,6 +20,7 @@ import { AnalyticsRoutes } from '../modules/analytics/analytics.route';
 import { SubscriptionRoutes } from '../modules/subscription/subscription.route';
 import { PaymentRoutes } from '../modules/payment/payment.route';
 import { ContactRoutes } from '../modules/contact/contact.route';
+import { ChatRoutes } from '../modules/chat/chat.route';
 
 const router = Router();
 
@@ -103,6 +104,10 @@ const moduleRoutes = [
   {
     path: '/contact',
     route: ContactRoutes,
+  },
+  {
+    path: '/chat',
+    route: ChatRoutes,
   },
 ];
 
