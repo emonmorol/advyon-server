@@ -409,6 +409,91 @@ const archiveClient = async (clientId: string) => {
   return result;
 };
 
+/**
+ * Get all lawyers with their profiles for the lawyer directory.
+ * Supports search (by name), filter (by practiceArea), and pagination.
+ */
+const getAllLawyers = async (query: Record<string, unknown>) => {
+  const {
+    search,
+    practiceArea,
+    page = 1,
+    limit = 12,
+  } = query as {
+    search?: string;
+    practiceArea?: string;
+    page?: number;
+    limit?: number;
+  };
+
+  const pageNum = Number(page);
+  const limitNum = Number(limit);
+  const skip = (pageNum - 1) * limitNum;
+
+  // Build user filter
+  const userFilter: Record<string, unknown> = {
+    role: 'lawyer',
+    isDeleted: { $ne: true },
+    status: 'active',
+  };
+
+  if (search) {
+    userFilter.fullName = { $regex: search, $options: 'i' };
+  }
+
+  // Get all matching lawyer users
+  const totalUsers = await User.countDocuments(userFilter);
+  const lawyerUsers = await User.find(userFilter)
+    .skip(skip)
+    .limit(limitNum)
+    .sort({ createdAt: -1 });
+
+  // Get lawyer profiles for these users
+  const userIds = lawyerUsers.map((u) => u._id);
+  const profiles = await LawyerProfile.find({ userId: { $in: userIds } });
+  const profileMap = new Map(profiles.map((p) => [String(p.userId), p]));
+
+  // Merge & optionally filter by practiceArea
+  let results = lawyerUsers.map((user) => {
+    const profile = profileMap.get(String(user._id));
+    return {
+      id: user.id,
+      fullName: user.fullName,
+      displayName: user.displayName,
+      email: user.email,
+      avatarUrl: user.avatarUrl,
+      bio: user.bio,
+      phone: user.phone,
+      address: user.address,
+      // Lawyer-specific fields
+      barRegistrationNumber: profile?.barRegistrationNumber || '',
+      barCouncilName: profile?.barCouncilName || '',
+      yearsOfExperience: profile?.yearsOfExperience || 0,
+      primaryPracticeArea: profile?.primaryPracticeArea || '',
+      verificationStatus: profile?.verificationStatus || 'pending',
+    };
+  });
+
+  // Filter by practice area if specified
+  if (practiceArea && practiceArea !== 'all') {
+    results = results.filter(
+      (r) => r.primaryPracticeArea.toLowerCase() === practiceArea.toLowerCase(),
+    );
+  }
+
+  return {
+    lawyers: results,
+    meta: {
+      total: practiceArea && practiceArea !== 'all' ? results.length : totalUsers,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(
+        (practiceArea && practiceArea !== 'all' ? results.length : totalUsers) / limitNum,
+      ),
+    },
+  };
+};
+
 export const UserServices = {
   createUser,
   getAllUsers,
@@ -423,5 +508,6 @@ export const UserServices = {
   getLawyerClients,
   getClientDetail, // WBS-7.1
   archiveClient,   // WBS-7.1
+  getAllLawyers,    // Lawyer Directory
   addClient: createUser // Reusing create for now, logic handled by role payload
 };

@@ -201,6 +201,17 @@ const trackBehavior = catchAsync(async (req, res) => {
   });
 });
 
+// Lawyer Directory: Get all lawyers with profiles
+const getAllLawyers = catchAsync(async (req, res) => {
+  const result = await UserServices.getAllLawyers(req.query);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Lawyers retrieved successfully',
+    data: result,
+  });
+});
+
 export const UserControllers = {
   createUser,
   getAllUsers,
@@ -218,4 +229,5 @@ export const UserControllers = {
   getPersonalization,
   updatePersonalization,
   trackBehavior,
+  getAllLawyers,
 };
