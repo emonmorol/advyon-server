@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+// Regex to reject emoji characters in name fields
+const noEmoji = /^[^\p{Emoji_Presentation}\p{Extended_Pictographic}]*$/u;
+
+// Regex for valid phone number characters (digits, +, -, spaces, parentheses)
+const validPhone = /^[\d\s+\-()]*$/;
+
 // Sync user validation (no body needed, data from JWT)
 const syncUserValidation = z.object({
   body: z.object({}).optional(),
@@ -16,9 +22,9 @@ const onboardValidation = z.object({
         // Common fields
         fullName: z.string({
           required_error: 'Full name is required',
-        }),
-        displayName: z.string().optional(),
-        phone: z.string().optional(),
+        }).regex(noEmoji, 'Name cannot contain emoji'),
+        displayName: z.string().regex(noEmoji, 'Display name cannot contain emoji').optional(),
+        phone: z.string().regex(validPhone, 'Phone number can only contain digits, +, -, spaces, and parentheses').optional(),
         avatarUrl: z.string().url().optional(),
         preferredLanguage: z.string().optional(),
         timezone: z.string().optional(),
@@ -73,14 +79,14 @@ const onboardValidation = z.object({
 const updateProfileValidation = z.object({
   body: z.object({
     // User table fields
-    fullName: z.string().optional(),
-    displayName: z.string().optional(),
+    fullName: z.string().regex(noEmoji, 'Name cannot contain emoji').optional(),
+    displayName: z.string().regex(noEmoji, 'Display name cannot contain emoji').optional(),
     avatarUrl: z.string().url().optional(),
     preferredLanguage: z.string().optional(),
     timezone: z.string().optional(),
 
     // Profile fields (role-specific)
-    phone: z.string().optional(),
+    phone: z.string().regex(validPhone, 'Phone number can only contain digits, +, -, spaces, and parentheses').optional(),
     address: z.string().optional(),
     barRegistrationNumber: z.string().optional(),
     barCouncilName: z.string().optional(),
