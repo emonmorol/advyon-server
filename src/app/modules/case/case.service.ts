@@ -259,7 +259,7 @@ const deleteCase = async (caseId: string, userId: string) => {
 
   // Soft delete
   await Case.findOneAndUpdate(
-    { id: caseId },
+    { _id: caseData._id },
     { isDeleted: true, deletedAt: new Date() },
     { new: true },
   );
