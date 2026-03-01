@@ -78,6 +78,18 @@ router.post(
 );
 
 /**
+ * PATCH /documents/:documentId/archive
+ * Archive a document
+ */
+router.patch('/:documentId/archive', auth(), DocumentControllers.archiveDocument);
+
+/**
+ * PATCH /documents/:documentId/restore
+ * Restore/Unarchive a document
+ */
+router.patch('/:documentId/restore', auth(), DocumentControllers.restoreDocument);
+
+/**
  * DELETE /documents/:caseId/:documentId
  * Delete a document
  * Requires authentication

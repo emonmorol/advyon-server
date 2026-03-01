@@ -253,6 +253,70 @@ const deleteDocument = async (
 };
 
 /**
+ * Archive a document (soft-archive: set status to 'archived')
+ */
+const archiveDocument = async (
+  documentId: string,
+  userId: string,
+) => {
+  // Verify user exists
+  const user = await User.findOne({ id: userId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // Find document
+  const document = await DocumentModel.findOne({ id: documentId, isDeleted: { $ne: true } });
+  if (!document) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+  }
+
+  // Only uploader can archive
+  if (document.uploadedBy.toString() !== user._id.toString() && document.uploaderId?.toString() !== user._id.toString()) {
+    throw new AppError(httpStatus.FORBIDDEN, 'You are not authorized to archive this document');
+  }
+
+  await DocumentModel.findByIdAndUpdate(document._id, {
+    status: 'archived',
+    archivedAt: new Date(),
+  });
+
+  return { message: 'Document archived successfully' };
+};
+
+/**
+ * Restore/Unarchive a document (set status back to 'active')
+ */
+const restoreDocument = async (
+  documentId: string,
+  userId: string,
+) => {
+  // Verify user exists
+  const user = await User.findOne({ id: userId });
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // Find document
+  const document = await DocumentModel.findOne({ id: documentId, isDeleted: { $ne: true } });
+  if (!document) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Document not found');
+  }
+
+  // Only uploader can restore
+  if (document.uploadedBy.toString() !== user._id.toString() && document.uploaderId?.toString() !== user._id.toString()) {
+    throw new AppError(httpStatus.FORBIDDEN, 'You are not authorized to restore this document');
+  }
+
+  await DocumentModel.findByIdAndUpdate(document._id, {
+    status: 'active',
+    archivedAt: null,
+  });
+
+  return { message: 'Document restored successfully' };
+};
+
+/**
  * Initiate document upload - creates initial DB record with 'pending' status
  * This is the first step in the Smart Document Intake pipeline
  * @param payload - Document metadata for initial record
@@ -480,12 +544,14 @@ const getAllUserDocuments = async (
     folder?: string;
     processingStatus?: 'pending' | 'processing' | 'completed' | 'failed';
     category?: string;
+    status?: 'active' | 'archived';
   } = {},
 ) => {
   // Build filter - get documents uploaded by this user, excluding soft-deleted
   const filter: any = {
     $or: [{ uploadedBy: userId }, { uploaderId: userId }],
     isDeleted: { $ne: true },
+    status: query.status || 'active', // default to active documents only
   };
 
   // Apply optional filters
@@ -572,6 +638,8 @@ export const DocumentServices = {
   uploadDocument,
   getDocumentsByCase,
   deleteDocument,
+  archiveDocument,
+  restoreDocument,
   initiateDocumentUpload,
   updateProcessingStatus,
   updateCloudinaryDetails,

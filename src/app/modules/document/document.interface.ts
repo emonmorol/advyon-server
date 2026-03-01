@@ -94,6 +94,10 @@ export interface TDocument extends Document {
   // Soft delete
   isDeleted: boolean;
   deletedAt: Date | null;
+
+  // Archive status
+  status: 'active' | 'archived';
+  archivedAt?: Date | null;
 }
 
 // Upload document payload

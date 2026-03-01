@@ -804,6 +804,42 @@ const getAllDocuments = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * Archive a document
+ * PATCH /documents/:documentId/archive
+ */
+const archiveDocument = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const { documentId } = req.params;
+
+  const result = await DocumentServices.archiveDocument(documentId, userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: result.message,
+    data: null,
+  });
+});
+
+/**
+ * Restore/Unarchive a document
+ * PATCH /documents/:documentId/restore
+ */
+const restoreDocument = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const { documentId } = req.params;
+
+  const result = await DocumentServices.restoreDocument(documentId, userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: result.message,
+    data: null,
+  });
+});
+
 export const DocumentControllers = {
   uploadDocument,
   uploadDocumentLegacy,
@@ -812,6 +848,8 @@ export const DocumentControllers = {
   getDocumentById,
   getDocumentStatus,
   deleteDocument,
+  archiveDocument,
+  restoreDocument,
   reanalyzeDocument,
   downloadDocument,
   batchDownload,

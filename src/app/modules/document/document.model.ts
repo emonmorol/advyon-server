@@ -137,6 +137,17 @@ const documentSchema = new Schema<TDocument>(
       type: Date,
       default: null,
     },
+
+    // Archive status
+    status: {
+      type: String,
+      enum: ['active', 'archived'],
+      default: 'active',
+    },
+    archivedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
