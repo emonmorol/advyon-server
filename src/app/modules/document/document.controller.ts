@@ -471,7 +471,10 @@ const getDocumentById = catchAsync(async (req, res) => {
   const docObj = document.toObject();
   if (docObj.cloudinaryPublicId) {
     try {
-      const resourceType = resolveResourceTypeFromUrl(docObj.cloudinaryUrl);
+      // Use stored mimeType if available, fall back to URL parsing for legacy documents
+      const resourceType = docObj.mimeType
+        ? resolveResourceTypeFromMime(docObj.mimeType)
+        : resolveResourceTypeFromUrl(docObj.cloudinaryUrl);
       const deliveryType = resolveDeliveryTypeFromUrl(docObj.cloudinaryUrl);
       docObj.cloudinaryUrl = getSignedUrl(docObj.cloudinaryPublicId, {
         resourceType,
@@ -618,7 +621,10 @@ const downloadDocument = catchAsync(async (req, res) => {
   }
 
   // Return Cloudinary URL with proper Content-Disposition guidance
-  const resourceType = resolveResourceTypeFromUrl(document.cloudinaryUrl);
+  // Use stored mimeType if available, fall back to URL parsing for legacy documents
+  const resourceType = document.mimeType
+    ? resolveResourceTypeFromMime(document.mimeType)
+    : resolveResourceTypeFromUrl(document.cloudinaryUrl);
   const deliveryType = resolveDeliveryTypeFromUrl(document.cloudinaryUrl);
   const signedDownloadUrl = document.cloudinaryPublicId
     ? getSignedUrl(document.cloudinaryPublicId, {
@@ -669,7 +675,10 @@ const batchDownload = catchAsync(async (req, res) => {
   const results = documentIds.map((docId) => {
     const doc = documents.find((d) => d.id === docId);
     if (!doc) return { documentId: docId, error: 'Not found' };
-    const resourceTypeForDoc = resolveResourceTypeFromUrl(doc.cloudinaryUrl);
+    // Use stored mimeType if available, fall back to URL parsing for legacy documents
+    const resourceTypeForDoc = doc.mimeType
+      ? resolveResourceTypeFromMime(doc.mimeType)
+      : resolveResourceTypeFromUrl(doc.cloudinaryUrl);
     const deliveryTypeForDoc = resolveDeliveryTypeFromUrl(doc.cloudinaryUrl);
     const signedDownloadUrl = doc.cloudinaryPublicId
       ? getSignedUrl(doc.cloudinaryPublicId, {
@@ -707,7 +716,10 @@ const getDocumentContent = catchAsync(async (req, res) => {
 
   const document = await DocumentServices.getDocumentContent(documentId);
 
-  const documentResourceType = resolveResourceTypeFromUrl(document.cloudinaryUrl);
+  // Use stored mimeType if available, fall back to URL parsing for legacy documents
+  const documentResourceType = document.mimeType
+    ? resolveResourceTypeFromMime(document.mimeType)
+    : resolveResourceTypeFromUrl(document.cloudinaryUrl);
   const deliveryType = resolveDeliveryTypeFromUrl(document.cloudinaryUrl);
   const sourceUrl = document.cloudinaryPublicId
     ? getSignedUrl(document.cloudinaryPublicId, {

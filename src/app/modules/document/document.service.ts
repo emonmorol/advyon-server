@@ -15,6 +15,7 @@ import { generateDocumentId } from './document.utils';
 import { ActivityService } from '../activity/activity.service';
 import {
   getSignedUrl,
+  resolveResourceTypeFromMime,
   resolveResourceTypeFromUrl,
   resolveDeliveryTypeFromUrl,
 } from '../../utils/file.upload.utils';
@@ -585,7 +586,10 @@ const getAllUserDocuments = async (
     const docObj = doc.toObject();
     if (docObj.cloudinaryPublicId) {
       try {
-        const resourceType = resolveResourceTypeFromUrl(docObj.cloudinaryUrl);
+        // Use stored mimeType if available, fall back to URL parsing for legacy documents
+        const resourceType = docObj.mimeType
+          ? resolveResourceTypeFromMime(docObj.mimeType)
+          : resolveResourceTypeFromUrl(docObj.cloudinaryUrl);
         const deliveryType = resolveDeliveryTypeFromUrl(docObj.cloudinaryUrl);
         docObj.cloudinaryUrl = getSignedUrl(docObj.cloudinaryPublicId, {
           resourceType,

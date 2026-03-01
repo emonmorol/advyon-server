@@ -68,15 +68,6 @@ const documentSchema = new Schema<TDocument>(
       type: Number,
       required: true,
     },
-    mimeType: {
-      type: String,
-      required: true,
-      default: 'application/octet-stream',
-    },
-    fileSize: {
-      type: Number,
-      required: true,
-    },
     cloudinaryUrl: {
       type: String,
       default: '',
