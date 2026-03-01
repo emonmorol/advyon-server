@@ -234,6 +234,7 @@ export const getSignedUrl = (
     resourceType?: CloudinaryResourceType;
     deliveryType?: CloudinaryDeliveryType;
     attachmentFilename?: string;
+    inline?: boolean;
   } = {},
 ): string => {
   const {
@@ -241,6 +242,7 @@ export const getSignedUrl = (
     resourceType = 'raw',
     deliveryType = 'authenticated',
     attachmentFilename,
+    inline = false,
   } = options;
 
   const expirationTimestamp = Math.floor(Date.now() / 1000) + expiresInSeconds;
@@ -254,6 +256,9 @@ export const getSignedUrl = (
 
   if (attachmentFilename) {
     urlOptions.attachment = attachmentFilename;
+  } else if (inline) {
+    // Force inline display instead of attachment for viewing
+    urlOptions.flags = 'inline';
   }
 
   return cloudinary.url(publicId, urlOptions);

@@ -10,17 +10,26 @@ import { AuthServices } from '../modules/auth/auth.service';
 
 const auth = (...requiredRoles: TUserRole[]) => {
   return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    let token: string | undefined;
     const authHeader = req.headers.authorization;
 
+    // Check authorization header first
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    }
+    
+    // Fallback: Check for token in query params (for iframe/object requests)
+    // This is needed for the /documents/:id/view endpoint where browsers can't send headers
+    if (!token && req.query.token && typeof req.query.token === 'string') {
+      token = req.query.token;
+    }
+    
     // console.log('authHeader',authHeader);
     
-    // Check if authorization header exists
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // Check if token exists
+    if (!token) {
       throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized!');
     }
-
-    // Extract token
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
     try {
       // Verify Clerk JWT token
