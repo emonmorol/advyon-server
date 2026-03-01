@@ -164,19 +164,39 @@ export const resolveResourceTypeFromMime = (
   if (!mimeType) return 'raw';
   const normalized = mimeType.toLowerCase();
 
-  if (normalized.startsWith('image/') || normalized === 'application/pdf') return 'image';
+  // Images (excluding PDFs - PDFs should be 'raw')
+  if (normalized.startsWith('image/') && normalized !== 'application/pdf') return 'image';
+
+  // Video and audio (Cloudinary stores audio under video resource type)
   if (normalized.startsWith('video/') || normalized.startsWith('audio/')) {
-    // Cloudinary stores audio assets under the video resource type
     return 'video';
   }
 
+  // PDFs should be 'raw' for proper handling
+  if (normalized === 'application/pdf') return 'raw';
+
+  // Document types should be 'raw'
+  const documentTypes = [
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument',
+    'application/vnd.ms-excel',
+    'application/vnd.ms-powerpoint',
+    'text/plain',
+    'application/rtf',
+  ];
+
+  if (documentTypes.some(type => normalized.includes(type))) return 'raw';
+
+  // Extension-based fallback for when only extension is provided
   if (!normalized.includes('/')) {
     const extension = normalized.replace('.', '');
-    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'pdf'];
+    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'];
     const videoExts = ['mp4', 'mov', 'avi', 'mkv', 'mp3', 'wav', 'm4a'];
+    const rawExts = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf'];
 
     if (imageExts.includes(extension)) return 'image';
     if (videoExts.includes(extension)) return 'video';
+    if (rawExts.includes(extension)) return 'raw';
   }
 
   return 'raw';

@@ -788,12 +788,13 @@ const getAllDocuments = catchAsync(async (req, res) => {
   }
 
   // Extract query parameters
-  const { folder, processingStatus, category } = req.query;
+  const { folder, processingStatus, category, status } = req.query;
 
   const result = await DocumentServices.getAllUserDocuments(resolvedUserId, {
     folder: folder as string | undefined,
     processingStatus: processingStatus as 'pending' | 'processing' | 'completed' | 'failed' | undefined,
     category: category as string | undefined,
+    status: status as 'active' | 'archived' | undefined,
   });
 
   sendResponse(res, {

@@ -83,7 +83,8 @@ const uploadDocument = async (
     caseId: caseData._id,
     folderName,
     fileName: normalizedFileName,
-    fileType,
+    fileType, // file extension
+    mimeType: file.mimetype, // full MIME type for proper resource type resolution
     fileSize: file.size,
     cloudinaryUrl: (file as any).path, // Cloudinary URL
     cloudinaryPublicId: (file as any).filename, // Cloudinary public ID
@@ -150,8 +151,12 @@ const getDocumentsByCase = async (
     );
   }
 
-  // Build filter - exclude soft-deleted documents
-  const filter: any = { caseId: caseData._id, isDeleted: { $ne: true } };
+  // Build filter - exclude soft-deleted and archived documents by default unless requested
+  const filter: any = {
+    caseId: caseData._id,
+    isDeleted: { $ne: true },
+    status: query.status === 'archived' ? 'archived' : { $ne: 'archived' },
+  };
 
   if (query.folder) {
     filter.folderName = query.folder;
@@ -167,7 +172,10 @@ const getDocumentsByCase = async (
     const docObj = doc.toObject();
     if (docObj.cloudinaryPublicId) {
       try {
-        const resourceType = resolveResourceTypeFromUrl(docObj.cloudinaryUrl);
+        // Use stored mimeType if available, fall back to URL parsing for legacy documents
+        const resourceType = docObj.mimeType
+          ? resolveResourceTypeFromMime(docObj.mimeType)
+          : resolveResourceTypeFromUrl(docObj.cloudinaryUrl);
         const deliveryType = resolveDeliveryTypeFromUrl(docObj.cloudinaryUrl);
         docObj.cloudinaryUrl = getSignedUrl(docObj.cloudinaryPublicId, {
           resourceType,
@@ -372,7 +380,8 @@ const initiateDocumentUpload = async (payload: TInitiateDocumentPayload) => {
     caseId: caseData._id,
     folderName,
     fileName: normalizedFileName,
-    fileType,
+    fileType, // file extension
+    mimeType: fileType, // full MIME type from payload
     fileSize,
     cloudinaryUrl: '', // Will be updated after upload
     cloudinaryPublicId: '', // Will be updated after upload
@@ -551,7 +560,7 @@ const getAllUserDocuments = async (
   const filter: any = {
     $or: [{ uploadedBy: userId }, { uploaderId: userId }],
     isDeleted: { $ne: true },
-    status: query.status || 'active', // default to active documents only
+    status: query.status === 'archived' ? 'archived' : { $ne: 'archived' }, // Handle legacy documents as 'active'
   };
 
   // Apply optional filters
