@@ -14,6 +14,7 @@ import globalErrorHandler from './app/middlewares/globalErrorhandler';
 import notFound from './app/middlewares/notFound';
 import router from './app/routes';
 import { HealthRoutes } from './app/modules/health/health.route';
+import healthRootRoutes from './app/modules/health/health.root.route';
 
 const app: Application = express();
 
@@ -43,7 +44,10 @@ const limiter = rateLimit({
   skip: (req) =>
     req.path === '/health' ||
     req.path === '/health/live' ||
-    req.path === '/health/ready',
+    req.path === '/health/ready' ||
+    req.path === '/api/v1/health' ||
+    req.path === '/api/v1/health/' ||
+    req.path.startsWith('/api/v1/health/'),
 });
 
 // Apply rate limiting to all API routes
@@ -81,6 +85,10 @@ app.use(
 console.log('CORS enabled for origins:', ALLOWED_ORIGINS);
 
 // Health check (no auth, no body parsing)
+// Root-level health endpoints for Render (no prefix)
+app.use('/health', healthRootRoutes);
+
+// API health check (with prefix)
 app.use('/api/v1/health', HealthRoutes);
 
 // application routes

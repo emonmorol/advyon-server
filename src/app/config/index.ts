@@ -9,6 +9,14 @@ export default {
   db_user: process.env.DB_USER,
   db_password: process.env.DB_PASSWORD,
   database_url: process.env.DATABASE_URL,
+  // Production database connection options
+  db_options: {
+    maxPoolSize: parseInt(process.env.DB_MAX_POOL_SIZE || '10'),
+    minPoolSize: parseInt(process.env.DB_MIN_POOL_SIZE || '2'),
+    serverSelectionTimeoutMS: parseInt(process.env.DB_SERVER_SELECTION_TIMEOUT || '5000'),
+    socketTimeoutMS: parseInt(process.env.DB_SOCKET_TIMEOUT || '45000'),
+    maxIdleTimeMS: parseInt(process.env.DB_MAX_IDLE_TIME || '30000'),
+  },
   bcrypt_salt_rounds: process.env.BCRYPT_SALT_ROUNDS,
   default_password: process.env.DEFAULT_PASS,
   jwt_access_secret: process.env.JWT_ACCESS_SECRET,

@@ -18,13 +18,13 @@ import { generateUserId, getUserWithProfile } from './auth.utils';
  */
 const syncUserFromClerk = async (clerkUserId: string, email: string) => {
   // Fetch from Clerk API to get the latest email and profile picture
-  let clerkUser;
+  let clerkUser: any;
   let finalEmail = email;
   let avatarUrl = '';
   try {
     clerkUser = await clerkClient.users.getUser(clerkUserId);
     if (!finalEmail && clerkUser?.emailAddresses?.length > 0) {
-      const primaryEmail = clerkUser.emailAddresses.find(e => e.id === clerkUser.primaryEmailAddressId);
+      const primaryEmail = clerkUser.emailAddresses.find((e: any) => e.id === clerkUser.primaryEmailAddressId);
       finalEmail = primaryEmail ? primaryEmail.emailAddress : clerkUser.emailAddresses[0].emailAddress;
     }
     if (clerkUser?.imageUrl) {
