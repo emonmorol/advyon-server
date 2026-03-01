@@ -227,6 +227,35 @@ router.patch(
 
 /**
  * @swagger
+ * /users/lawyer/verify-request:
+ *   post:
+ *     summary: Submit lawyer verification request
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               barRegistrationNumber:
+ *                 type: string
+ *               barCouncilName:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Verification submitted
+ */
+router.post(
+  '/lawyer/verify-request',
+  auth('lawyer'),
+  UserControllers.submitVerificationRequest,
+);
+
+/**
+ * @swagger
  * /users/me/change-password:
  *   post:
  *     summary: Change password

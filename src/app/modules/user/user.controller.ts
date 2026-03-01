@@ -212,6 +212,17 @@ const getAllLawyers = catchAsync(async (req, res) => {
   });
 });
 
+const submitVerificationRequest = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const result = await UserServices.submitVerificationRequest(userId, req.body);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Verification request submitted successfully',
+    data: result,
+  });
+});
+
 export const UserControllers = {
   createUser,
   getAllUsers,
@@ -230,4 +241,5 @@ export const UserControllers = {
   updatePersonalization,
   trackBehavior,
   getAllLawyers,
+  submitVerificationRequest,
 };

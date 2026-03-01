@@ -144,6 +144,10 @@ const getMyProfile = async (userId: string) => {
   if (roleProfile) {
     profile.phone = roleProfile.phoneNumber || roleProfile.contactNumber || '';
     profile.address = roleProfile.address || '';
+    if (user.role === 'lawyer' || user.role === 'judge') {
+      profile.verificationStatus = roleProfile.verificationStatus || 'pending';
+      profile.verificationNotes = roleProfile.verificationNotes || '';
+    }
   }
 
   return profile;
@@ -494,6 +498,31 @@ const getAllLawyers = async (query: Record<string, unknown>) => {
   };
 };
 
+/**
+ * Submit Lawyer Verification Request
+ */
+const submitVerificationRequest = async (userId: string, payload: any) => {
+  // Find lawyer profile by custom user id
+  const profile = await LawyerProfile.findOne({ id: userId });
+  if (!profile) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Lawyer profile not found');
+  }
+
+  const { barRegistrationNumber, barCouncilName } = payload;
+  
+  const updateData: any = { verificationStatus: 'pending' };
+  if (barRegistrationNumber) updateData.barRegistrationNumber = barRegistrationNumber;
+  if (barCouncilName) updateData.barCouncilName = barCouncilName;
+
+  const updatedProfile = await LawyerProfile.findOneAndUpdate(
+    { id: userId },
+    updateData,
+    { new: true }
+  );
+
+  return updatedProfile;
+};
+
 export const UserServices = {
   createUser,
   getAllUsers,
@@ -509,5 +538,6 @@ export const UserServices = {
   getClientDetail, // WBS-7.1
   archiveClient,   // WBS-7.1
   getAllLawyers,    // Lawyer Directory
-  addClient: createUser // Reusing create for now, logic handled by role payload
+  addClient: createUser, // Reusing create for now, logic handled by role payload
+  submitVerificationRequest,
 };
