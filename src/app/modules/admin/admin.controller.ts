@@ -7,6 +7,7 @@ import httpStatus from 'http-status';
 
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
+import AppError from '../../errors/appError';
 
 import { AdminService } from './admin.service';
 import { TUserRole, TUserStatus } from './admin.interface';
@@ -194,6 +195,52 @@ const getAuditLogs = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// ─── Lawyer Verification ─────────────────────────────────────────
+const getPendingLawyerVerifications = catchAsync(async (req: Request, res: Response) => {
+  const page = Number(req.query.page) || DEFAULT_PAGE;
+  const limit = Number(req.query.limit) || DEFAULT_LIMIT;
+
+  const options = {
+    page,
+    limit,
+    sort: '-createdAt',
+    skip: (page - 1) * limit,
+  };
+
+  const result = await AdminService.getPendingLawyerVerifications(options);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Pending verifications fetched successfully',
+    data: result.data,
+  });
+});
+
+const reviewLawyerVerification = catchAsync(async (req: Request, res: Response) => {
+  const requestingUserId = req.user.userId;
+  const { lawyerId } = req.params;
+  const { status, notes } = req.body;
+
+  if (!['verified', 'rejected'].includes(status)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Status must be either verified or rejected');
+  }
+
+  const result = await AdminService.reviewLawyerVerification(
+    lawyerId,
+    status,
+    notes,
+    requestingUserId,
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: `Lawyer verification ${status} successfully`,
+    data: result,
+  });
+});
+
 export const AdminController = {
   // User management
   getAllUsers,
@@ -208,4 +255,6 @@ export const AdminController = {
   updateSystemSettings,
   getAnalyticsOverview,
   getAuditLogs,
+  getPendingLawyerVerifications,
+  reviewLawyerVerification,
 };

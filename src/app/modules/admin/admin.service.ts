@@ -485,6 +485,65 @@ const getAuditLogs = async (
   };
 };
 
+// ─── Lawyer Verification ─────────────────────────────────────────
+/**
+ * Get all lawyer profiles with pending verification status
+ */
+const getPendingLawyerVerifications = async (options: TPaginationOptions) => {
+  const { LawyerProfile } = await import('../user/profile.model');
+
+  const pendingProfiles = await LawyerProfile.find({ verificationStatus: 'pending' })
+    .skip(options.skip)
+    .limit(options.limit)
+    .sort(options.sort || '-createdAt')
+    .populate('userId', 'fullName email status avatarUrl id'); // Populate user data
+
+  const total = await LawyerProfile.countDocuments({ verificationStatus: 'pending' });
+
+  return {
+    meta: { total, page: options.page, limit: options.limit },
+    data: pendingProfiles,
+  };
+};
+
+/**
+ * Approve or Reject a lawyer's verification request
+ */
+const reviewLawyerVerification = async (
+  lawyerId: string,
+  status: 'verified' | 'rejected',
+  notes: string,
+  requestingUserId: string,
+) => {
+  const { LawyerProfile } = await import('../user/profile.model');
+  const requestingUser = await User.findOne({ id: requestingUserId });
+
+  const profile = await LawyerProfile.findOne({ id: lawyerId });
+  if (!profile) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Lawyer profile not found');
+  }
+
+  profile.verificationStatus = status;
+  if (notes) profile.verificationNotes = notes;
+  
+  await profile.save();
+
+  // Audit log
+  if (requestingUser) {
+    await writeAuditLog({
+      action: `REVIEW_LAWYER_VERIFICATION`,
+      actorId: requestingUser._id.toString(),
+      actorEmail: requestingUser.email,
+      actorRole: requestingUser.role || 'unknown',
+      target: lawyerId,
+      targetType: 'user',
+      details: { newStatus: status, notes },
+    });
+  }
+
+  return profile;
+};
+
 export const AdminService = {
   // User management
   getAllUsers,
@@ -499,4 +558,7 @@ export const AdminService = {
   updateSystemSettings,
   getAnalyticsOverview,
   getAuditLogs,
+  // Lawyer Verification
+  getPendingLawyerVerifications,
+  reviewLawyerVerification,
 };

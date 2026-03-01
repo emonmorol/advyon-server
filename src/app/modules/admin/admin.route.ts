@@ -119,4 +119,20 @@ router.get(
   AdminController.getAuditLogs,
 );
 
+// ─── Lawyer Verification ─────────────────────────────────────────
+
+/** GET /admin/verifications — Get pending lawyer verifications */
+router.get(
+  '/verifications',
+  auth('admin', 'superAdmin'),
+  AdminController.getPendingLawyerVerifications,
+);
+
+/** PATCH /admin/verifications/:lawyerId — Review lawyer verification */
+router.patch(
+  '/verifications/:lawyerId',
+  auth('admin', 'superAdmin'),
+  AdminController.reviewLawyerVerification,
+);
+
 export const AdminRoutes = router;
