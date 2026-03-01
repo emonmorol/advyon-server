@@ -725,6 +725,7 @@ const getDocumentContent = catchAsync(async (req, res) => {
     ? getSignedUrl(document.cloudinaryPublicId, {
         resourceType: documentResourceType,
         deliveryType: deliveryType,
+        inline: true, // Force inline display for viewer
       })
     : document.cloudinaryUrl;
 
@@ -853,6 +854,61 @@ const restoreDocument = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * View document inline - Proxy through backend to force inline display
+ * GET /documents/:documentId/view
+ * This solves Cloudinary's Content-Disposition: attachment issue for raw files
+ */
+const viewDocument = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const { documentId } = req.params;
+
+  await assertDocumentAccess(userId, documentId);
+
+  const document = await DocumentServices.getDocumentContent(documentId);
+
+  if (!document.cloudinaryUrl) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Document content not available');
+  }
+
+  // Generate signed URL to fetch from Cloudinary
+  const documentResourceType = document.mimeType
+    ? resolveResourceTypeFromMime(document.mimeType)
+    : resolveResourceTypeFromUrl(document.cloudinaryUrl);
+  const deliveryType = resolveDeliveryTypeFromUrl(document.cloudinaryUrl);
+  
+  const signedUrl = document.cloudinaryPublicId
+    ? getSignedUrl(document.cloudinaryPublicId, {
+        resourceType: documentResourceType,
+        deliveryType: deliveryType,
+      })
+    : document.cloudinaryUrl;
+
+  // Determine content type
+  const mimeType = document.mimeType || 'application/octet-stream';
+  const fileName = document.fileName || `document-${documentId}`;
+
+  // Set headers for inline display
+  res.setHeader('Content-Type', mimeType);
+  res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+
+  // Stream the file from Cloudinary to client
+  try {
+    const axios = await import('axios');
+    const response = await axios.default.get(signedUrl, {
+      responseType: 'stream',
+      timeout: 30000,
+    });
+
+    // Pipe the Cloudinary response to our client
+    response.data.pipe(res);
+  } catch (error) {
+    console.error('Error streaming document from Cloudinary:', error);
+    throw new AppError(httpStatus.BAD_GATEWAY, 'Failed to fetch document from storage');
+  }
+});
+
 export const DocumentControllers = {
   uploadDocument,
   uploadDocumentLegacy,
@@ -869,5 +925,6 @@ export const DocumentControllers = {
   getDocumentContent,
   updateDocumentSummary,
   getAllDocuments,
+  viewDocument,
 };
 

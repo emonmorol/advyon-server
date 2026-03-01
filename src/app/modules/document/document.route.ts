@@ -32,6 +32,16 @@ router.get(
 );
 
 /**
+ * GET /documents/:documentId/view
+ * Proxy document for inline viewing (solves Cloudinary attachment issue)
+ */
+router.get(
+  '/:documentId/view',
+  auth(),
+  DocumentControllers.viewDocument
+);
+
+/**
  * PUT /documents/:documentId/summary
  * Update document summary
  */
