@@ -49,14 +49,16 @@ const onboardValidation = z.object({
         if (data.role === 'lawyer') {
           return (
             data.profile.barRegistrationNumber &&
-            data.profile.barCouncilName
+            data.profile.barCouncilName &&
+            data.profile.yearsOfExperience !== undefined &&
+            data.profile.primaryPracticeArea
           );
         }
         return true;
       },
       {
         message:
-          'Bar registration number and bar council name are required for lawyers',
+          'Bar registration number, bar council name, years of experience, and primary practice area are required for lawyers',
         path: ['profile'],
       },
     )
