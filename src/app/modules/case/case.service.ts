@@ -4,7 +4,7 @@ import AppError from '../../errors/appError';
 import { User } from '../user/user.model';
 import { TCreateCasePayload, TCaseQuery, TUpdateCasePayload } from './case.interface';
 import { Case } from './case.model';
-import { generateCaseId } from './case.utils';
+import { generateCaseId, generateCaseNumber } from './case.utils';
 import { DEFAULT_CASE_FOLDERS } from './case.constant';
 import { ActivityService } from '../activity/activity.service';
 import { CaseAccessModel } from '../caseAccess/caseAccess.model';
@@ -23,13 +23,16 @@ const createCase = async (userId: string, payload: TCreateCasePayload) => {
   // Generate unique case ID
   const caseId = await generateCaseId();
 
+  // Generate unique case number if not provided
+  const caseNumber = payload.caseNumber || (await generateCaseNumber());
+
   // Use default folders if not provided
   const folders = payload.folders || DEFAULT_CASE_FOLDERS;
 
   // Create case
   const newCase = await Case.create({
     id: caseId,
-    caseNumber: payload.caseNumber,
+    caseNumber,
     title: payload.title,
     caseType: payload.caseType,
     urgency: payload.urgency,

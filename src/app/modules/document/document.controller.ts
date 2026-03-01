@@ -884,14 +884,21 @@ const viewDocument = catchAsync(async (req, res) => {
       })
     : document.cloudinaryUrl;
 
-  // Determine content type
+  // Determine content type and filename
   const mimeType = document.mimeType || 'application/octet-stream';
   const fileName = document.fileName || `document-${documentId}`;
+  
+  // Ensure filename has .pdf extension for PDFs
+  const finalFileName = fileName.toLowerCase().endsWith('.pdf') 
+    ? fileName 
+    : `${fileName}.pdf`;
 
-  // Set headers for inline display
-  res.setHeader('Content-Type', mimeType);
-  res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-  res.setHeader('Cache-Control', 'private, max-age=3600');
+  console.log('[ViewDocument] Streaming file:', {
+    documentId,
+    mimeType,
+    fileName: finalFileName,
+    resourceType: documentResourceType,
+  });
 
   // Stream the file from Cloudinary to client
   try {
@@ -900,6 +907,11 @@ const viewDocument = catchAsync(async (req, res) => {
       responseType: 'stream',
       timeout: 30000,
     });
+
+    // Set headers for inline display (must be set before piping)
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${finalFileName}"`);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
 
     // Pipe the Cloudinary response to our client
     response.data.pipe(res);
