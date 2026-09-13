@@ -17,3 +17,9 @@ export const createPortalSessionSchema = z.object({
     returnUrl: z.string().url(),
   }),
 });
+
+export const verifyCheckoutSchema = z.object({
+  body: z.object({
+    sessionId: z.string().min(1),
+  }),
+});

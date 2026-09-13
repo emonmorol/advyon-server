@@ -12,14 +12,11 @@ const router = express.Router();
 
 /**
  * POST /payments/webhook — Stripe webhook endpoint.
- * IMPORTANT: Uses express.raw() for Stripe signature verification.
- * This must NOT use JSON body parsing.
+ * IMPORTANT: The raw body parser for this path is registered in app.ts
+ * (before the global JSON parser) so that Stripe signature verification
+ * receives the raw body. No body-parsing middleware must be added here.
  */
-router.post(
-  '/webhook',
-  express.raw({ type: 'application/json' }),
-  handleStripeWebhook,
-);
+router.post('/webhook', handleStripeWebhook);
 
 /** GET /payments/me — Current user's payment history */
 router.get(

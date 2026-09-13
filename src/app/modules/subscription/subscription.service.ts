@@ -4,6 +4,7 @@
  * plan retrieval, and subscription cancellation.
  */
 import httpStatus from 'http-status';
+import Stripe from 'stripe';
 import { User } from '../user/user.model';
 import { Subscription } from './subscription.model';
 import { PLAN_CONFIGS, SUBSCRIPTION_ERROR_MESSAGES } from './subscription.constant';
@@ -11,6 +12,47 @@ import { ICheckoutSessionRequest, TPlanTier, TBillingInterval } from './subscrip
 import { stripe } from '../../config/stripe.config';
 import AppError from '../../errors/appError';
 import { Payment } from '../payment/payment.model';
+
+/**
+ * Legacy top-level period fields on the Stripe Subscription object.
+ * These were removed in API version 2026-01-28.clover (the values moved to
+ * subscription items), so they can only be read via a cast as a fallback.
+ */
+type LegacyStripePeriodFields = {
+  current_period_start?: number;
+  current_period_end?: number;
+};
+
+/**
+ * Safely extract the current billing period from a Stripe Subscription.
+ *
+ * API version 2026-01-28.clover removed `current_period_start/end` from the
+ * top-level Subscription object (they now live on subscription items), so the
+ * first subscription item is preferred, with the legacy top-level fields as a
+ * fallback. Keys are only set when a valid unix-seconds number exists, so
+ * callers never persist `Invalid Date`.
+ */
+export const getStripePeriod = (
+  stripeSubscription: Stripe.Subscription,
+): { currentPeriodStart?: Date; currentPeriodEnd?: Date } => {
+  const legacy = stripeSubscription as Stripe.Subscription & LegacyStripePeriodFields;
+
+  const start =
+    stripeSubscription.items?.data?.[0]?.current_period_start ??
+    legacy.current_period_start;
+  const end =
+    stripeSubscription.items?.data?.[0]?.current_period_end ??
+    legacy.current_period_end;
+
+  const period: { currentPeriodStart?: Date; currentPeriodEnd?: Date } = {};
+  if (typeof start === 'number') {
+    period.currentPeriodStart = new Date(start * 1000);
+  }
+  if (typeof end === 'number') {
+    period.currentPeriodEnd = new Date(end * 1000);
+  }
+  return period;
+};
 
 /**
  * Get all available subscription plans.
@@ -227,11 +269,22 @@ const verifyCheckoutSession = async (userId: string, sessionId: string) => {
     expand: ['subscription'],
   });
 
+  // The session must belong to the calling user — `userId` metadata is set to
+  // user._id.toString() when the checkout session is created.
+  if (session.metadata?.userId !== user._id.toString()) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'This checkout session does not belong to you',
+    );
+  }
+
   if (session.payment_status !== 'paid') {
     throw new AppError(httpStatus.BAD_REQUEST, 'Payment not completed');
   }
 
-  const stripeSubscription = session.subscription as any;
+  // Retrieved with expand: ['subscription'], so this is a full Subscription
+  // object rather than an id string.
+  const stripeSubscription = session.subscription as Stripe.Subscription | null;
   if (!stripeSubscription) {
     throw new AppError(httpStatus.BAD_REQUEST, 'No subscription found in session');
   }
@@ -239,7 +292,8 @@ const verifyCheckoutSession = async (userId: string, sessionId: string) => {
   const plan = (session.metadata?.plan || 'starter') as TPlanTier;
   const billingInterval = (session.metadata?.billingInterval || 'month') as TBillingInterval;
 
-  // Upsert local subscription record
+  // Upsert local subscription record; period keys are only set when Stripe
+  // returned valid timestamps.
   const subscription = await Subscription.findOneAndUpdate(
     { user: user._id },
     {
@@ -249,8 +303,7 @@ const verifyCheckoutSession = async (userId: string, sessionId: string) => {
       billingInterval,
       stripeCustomerId: session.customer as string,
       stripeSubscriptionId: stripeSubscription.id,
-      currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
-      currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+      ...getStripePeriod(stripeSubscription),
       cancelAtPeriodEnd: false,
     },
     { upsert: true, new: true },

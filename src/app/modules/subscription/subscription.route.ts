@@ -8,6 +8,7 @@ import validateRequest from '../../middlewares/validateRequest';
 import {
   createCheckoutSessionSchema,
   createPortalSessionSchema,
+  verifyCheckoutSchema,
 } from './subscription.validation';
 
 const router = express.Router();
@@ -38,6 +39,11 @@ router.post(
 router.post('/cancel', auth(), SubscriptionController.cancelSubscription);
 
 /** POST /subscriptions/verify-checkout — Verify completed checkout and sync subscription */
-router.post('/verify-checkout', auth(), SubscriptionController.verifyCheckout);
+router.post(
+  '/verify-checkout',
+  auth(),
+  validateRequest(verifyCheckoutSchema),
+  SubscriptionController.verifyCheckout,
+);
 
 export const SubscriptionRoutes = router;

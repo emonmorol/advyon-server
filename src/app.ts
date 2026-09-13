@@ -63,6 +63,10 @@ const authLimiter = rateLimit({
 app.use('/api/v1/auth/login', authLimiter);
 app.use('/api/v1/auth/register', authLimiter);
 
+// Stripe webhook needs the raw body for signature verification; must be
+// registered before the global JSON parser.
+app.use('/api/v1/payments/webhook', express.raw({ type: 'application/json' }));
+
 //parsers
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

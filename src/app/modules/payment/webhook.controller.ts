@@ -10,6 +10,7 @@ import { Request, Response } from 'express';
 import Stripe from 'stripe';
 import { stripe, STRIPE_WEBHOOK_SECRET } from '../../config/stripe.config';
 import { Subscription } from '../subscription/subscription.model';
+import { getStripePeriod } from '../subscription/subscription.service';
 import { Payment } from './payment.model';
 
 /**
@@ -107,8 +108,8 @@ async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
     {
       status: sub.status as any,
       cancelAtPeriodEnd: sub.cancel_at_period_end,
-      currentPeriodStart: new Date((sub as any).current_period_start * 1000),
-      currentPeriodEnd: new Date((sub as any).current_period_end * 1000),
+      // Period keys are only set when Stripe returned valid timestamps.
+      ...getStripePeriod(sub),
     },
   );
 }
