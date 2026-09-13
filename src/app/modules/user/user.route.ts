@@ -44,6 +44,7 @@ const router = express.Router();
  */
 router.post(
   '/create-user',
+  auth('admin', 'superAdmin'),
   validateRequest(UserValidation.createUserValidationSchema),
   UserControllers.createUser,
 );
@@ -399,6 +400,8 @@ router.get(
  */
 router.get(
   '/',
+  auth('admin', 'superAdmin'),
+  validateRequest(UserValidation.queryUserValidation),
   UserControllers.getAllUsers,
 );
 
@@ -424,6 +427,7 @@ router.get(
  */
 router.get(
   '/:id',
+  auth(),
   UserControllers.getSingleUser,
 );
 
@@ -458,6 +462,7 @@ router.get(
  */
 router.patch(
   '/:id',
+  auth('admin', 'superAdmin'),
   validateRequest(UserValidation.updateUserValidationSchema),
   UserControllers.updateUser,
 );
@@ -482,6 +487,7 @@ router.patch(
  */
 router.delete(
   '/:id',
+  auth('admin', 'superAdmin'),
   UserControllers.deleteUser,
 );
 

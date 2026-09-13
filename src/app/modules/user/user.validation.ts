@@ -51,7 +51,26 @@ const updateUserValidationSchema = z.object({
   }),
 });
 
+// Query schema for GET /users — allowlists the plain-string filter fields the
+// query builder consumes (searchTerm/page/limit/sort/fields) plus the user
+// filter fields (role/status). `.strict()` rejects any other key so that
+// operator/objects (e.g. ?password[$ne]=...) never reach User.find().
+const queryUserValidation = z.object({
+  query: z
+    .object({
+      searchTerm: z.string().optional(),
+      page: z.string().optional(),
+      limit: z.string().optional(),
+      sort: z.string().optional(),
+      fields: z.string().optional(),
+      role: z.string().optional(),
+      status: z.string().optional(),
+    })
+    .strict(),
+});
+
 export const UserValidation = {
   createUserValidationSchema,
   updateUserValidationSchema,
+  queryUserValidation,
 };

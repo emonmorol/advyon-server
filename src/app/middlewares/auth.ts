@@ -19,8 +19,22 @@ const auth = (...requiredRoles: TUserRole[]) => {
     }
     
     // Fallback: Check for token in query params (for iframe/object requests)
-    // This is needed for the /documents/:id/view endpoint where browsers can't send headers
-    if (!token && req.query.token && typeof req.query.token === 'string') {
+    // This is needed for the document viewer endpoints
+    // (/documents/:documentId/view and /documents/:documentId/content) where
+    // browsers can't send headers. Restricted to these paths only so bearer
+    // tokens don't leak into logs/history on every other route.
+    // Note: inside the documents router req.path is router-relative,
+    // e.g. '/<documentId>/view' or '/<documentId>/content'.
+    const isDocumentViewerPath =
+      req.baseUrl.endsWith('/documents') &&
+      (req.path.endsWith('/view') || req.path.endsWith('/content'));
+
+    if (
+      !token &&
+      isDocumentViewerPath &&
+      req.query.token &&
+      typeof req.query.token === 'string'
+    ) {
       token = req.query.token;
     }
     

@@ -1,8 +1,11 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { verifyToken } from '@clerk/clerk-sdk-node';
+import { Types } from 'mongoose';
 import config from '../../config';
 import { User } from '../user/user.model';
+import { CaseServices } from '../case/case.service';
+import { Conversation } from '../chat/chat.model';
 
 /**
  * Phase 8.1-8.2: WebSocket Service
@@ -109,9 +112,23 @@ class SocketService {
       }
 
       // Handle joining case rooms for case-specific updates
-      socket.on(SOCKET_EVENTS.JOIN_CASE, (caseId: string) => {
-        socket.join(`case:${caseId}`);
-        console.log(`[Socket] User ${socket.userId} joined case:${caseId}`);
+      // SECURITY: verify the user is allowed to view the case before joining,
+      // reusing the same authorization logic as GET /cases/:caseId
+      // (owner / primary client / shared access / admin).
+      socket.on(SOCKET_EVENTS.JOIN_CASE, async (caseId: string) => {
+        try {
+          if (typeof caseId !== 'string' || !socket.userId) {
+            throw new Error('Unauthorized');
+          }
+
+          // Throws (404/403) when the user cannot access the case
+          await CaseServices.getCaseById(caseId, socket.userId);
+
+          socket.join(`case:${caseId}`);
+          console.log(`[Socket] User ${socket.userId} joined case:${caseId}`);
+        } catch (error) {
+          socket.emit('error:unauthorized', { room: `case:${caseId}` });
+        }
       });
 
       socket.on(SOCKET_EVENTS.LEAVE_CASE, (caseId: string) => {
@@ -120,8 +137,38 @@ class SocketService {
       });
 
       // Chat room handlers
-      socket.on(SOCKET_EVENTS.CHAT_JOIN, (conversationId: string) => {
-        socket.join(`chat:${conversationId}`);
+      // SECURITY: verify the user is a participant of the conversation before
+      // joining. socket.userId is the custom user id (e.g. 'CLI-0001') while
+      // conversation participants are stored as Mongo ObjectIds, so the user
+      // document is loaded to compare against the participant list.
+      socket.on(SOCKET_EVENTS.CHAT_JOIN, async (conversationId: string) => {
+        try {
+          if (
+            typeof conversationId !== 'string' ||
+            !socket.userId ||
+            !Types.ObjectId.isValid(conversationId)
+          ) {
+            throw new Error('Unauthorized');
+          }
+
+          const user = await User.findOne({ id: socket.userId }).select('_id');
+          if (!user) {
+            throw new Error('Unauthorized');
+          }
+
+          const conversation = await Conversation.findOne({
+            _id: new Types.ObjectId(conversationId),
+            participants: user._id,
+          });
+
+          if (!conversation) {
+            throw new Error('Unauthorized');
+          }
+
+          socket.join(`chat:${conversationId}`);
+        } catch (error) {
+          socket.emit('error:unauthorized', { room: `chat:${conversationId}` });
+        }
       });
 
       socket.on(SOCKET_EVENTS.CHAT_LEAVE, (conversationId: string) => {
