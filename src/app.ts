@@ -53,15 +53,17 @@ const limiter = rateLimit({
 // Apply rate limiting to all API routes
 app.use('/api/', limiter);
 
-// Stricter rate limit for auth routes (prevent brute force login)
+// Stricter rate limit for auth routes (prevent brute force / abuse)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20, // Only 20 login attempts per 15 minutes
+  max: 60, // 60 attempts per 15 minutes — /auth/sync is called on every
+  // login/refresh (with up to 4 attempts per invocation via retry backoff),
+  // so this stays generous for normal use while still throttling abuse.
   message: 'Too many authentication attempts, please try again later.',
 });
 
-app.use('/api/v1/auth/login', authLimiter);
-app.use('/api/v1/auth/register', authLimiter);
+app.use('/api/v1/auth/sync', authLimiter);
+app.use('/api/v1/auth/onboard', authLimiter);
 
 // Stripe webhook needs the raw body for signature verification; must be
 // registered before the global JSON parser.
