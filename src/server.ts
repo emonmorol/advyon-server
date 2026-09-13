@@ -55,7 +55,7 @@ async function main() {
       console.warn('⚠️ MongoDB disconnected. Attempting to reconnect...');
     });
 
-    seedSuperAdmin();
+    seedSuperAdmin().catch((err) => console.error('Super admin seeding failed:', err.message));
     
     // Create HTTP server for both Express and Socket.io
     server = createServer(app);

@@ -55,30 +55,6 @@ router.post(
 );
 
 /**
- * POST /cases/:caseId/documents
- * Upload a document to a specific case
- * Requires authentication and file upload
- */
-router.post(
-  '/:caseId/documents',
-  auth(),
-  uploadDocument.single('file'),
-  fileUploadSecurity,  // WBS-TD-SC-03
-  validateRequest(DocumentValidation.uploadDocumentValidation),
-  DocumentControllers.uploadDocument,
-);
-
-/**
- * GET /cases/:caseId/documents/:documentId/status
- * Check document processing status
- */
-router.get(
-  '/:caseId/documents/:documentId/status',
-  auth(),
-  DocumentControllers.getDocumentStatus,
-);
-
-/**
  * GET /cases
  * Get all cases with optional filters
  * Requires authentication
@@ -89,6 +65,23 @@ router.get(
   validateRequest(CaseValidation.queryCaseValidation),
   CaseControllers.getAllCases,
 );
+
+// WBS-4.2: Get archived cases (registered before /:caseId so 'archived'
+// is not captured as a caseId)
+router.get('/archived',
+  auth(),
+  CaseControllers.getArchivedCases);
+
+// WBS-5.1: Check for duplicate cases
+router.post('/check-duplicate',
+  auth(),
+  CaseControllers.checkDuplicateCase);
+
+// WBS-5.1: Get case templates (registered before /:caseId so 'templates'
+// is not captured as a caseId)
+router.get('/templates',
+  auth(),
+  CaseControllers.getCaseTemplates);
 
 /**
  * @swagger
@@ -223,25 +216,10 @@ router.patch('/:caseId/restore',
   auth(),
   CaseControllers.restoreCase);
 
-// WBS-4.2: Get archived cases
-router.get('/archived',
-  auth(),
-  CaseControllers.getArchivedCases);
-
 // WBS-4.2: Permanent delete a case (must be archived first)
 router.delete('/:caseId/permanent',
   auth(),
   CaseControllers.permanentDeleteCase);
-
-// WBS-5.1: Check for duplicate cases
-router.post('/check-duplicate',
-  auth(),
-  CaseControllers.checkDuplicateCase);
-
-// WBS-5.1: Get case templates
-router.get('/templates',
-  auth(),
-  CaseControllers.getCaseTemplates);
 
 // =========================================================================
 // Document Routes for Case

@@ -915,6 +915,25 @@ const viewDocument = catchAsync(async (req, res) => {
 
     // Pipe the Cloudinary response to our client
     response.data.pipe(res);
+
+    // Guard against mid-stream failures (e.g. network blip, signed URL expiry).
+    // Without an 'error' listener the emitted 'error' event is unhandled and
+    // crashes the whole server via uncaughtException.
+    response.data.on('error', (streamError: Error) => {
+      console.error('Document stream failed:', streamError.message);
+      // Headers may already be sent; destroy the response so the client
+      // sees the connection drop instead of a truncated 200.
+      if (!res.headersSent) {
+        sendResponse(res, {
+          statusCode: httpStatus.BAD_GATEWAY,
+          success: false,
+          message: 'Document stream failed',
+          data: null,
+        });
+      } else {
+        res.destroy();
+      }
+    });
   } catch (error) {
     console.error('Error streaming document from Cloudinary:', error);
     throw new AppError(httpStatus.BAD_GATEWAY, 'Failed to fetch document from storage');
