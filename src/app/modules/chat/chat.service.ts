@@ -184,10 +184,15 @@ const sendMessage = async (
 
   // Emit via socket to the conversation room
   if (otherParticipant) {
-    socketService.emitToUser(otherParticipant.toString(), 'chat:message', {
-      conversationId,
-      message: populatedMessage,
-    });
+    // Personal rooms are keyed by the custom user id (e.g. 'CLI-0001'),
+    // not the Mongo ObjectId — resolve the participant's user document first.
+    const otherUser = await User.findById(otherParticipant).select('id');
+    if (otherUser) {
+      socketService.emitToUser(otherUser.id, 'chat:message', {
+        conversationId,
+        message: populatedMessage,
+      });
+    }
     // Also emit to the conversation room for any connected participants
     const io = socketService.getIO();
     if (io) {
@@ -240,10 +245,15 @@ const markAsRead = async (conversationId: string, userId: string) => {
     (p: Types.ObjectId) => !p.equals(userObjId)
   );
   if (otherParticipant) {
-    socketService.emitToUser(otherParticipant.toString(), 'chat:read', {
-      conversationId,
-      readBy: userObjId.toString(),
-    });
+    // Personal rooms are keyed by the custom user id (e.g. 'CLI-0001'),
+    // not the Mongo ObjectId — resolve the participant's user document first.
+    const otherUser = await User.findById(otherParticipant).select('id');
+    if (otherUser) {
+      socketService.emitToUser(otherUser.id, 'chat:read', {
+        conversationId,
+        readBy: userObjId.toString(),
+      });
+    }
   }
 
   return { success: true };
